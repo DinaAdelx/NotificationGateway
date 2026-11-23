@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="NotificationGateway.API/NotificationGateway.API.csproj" />
+  <Project Path="NotificationGateway.Application/NotificationGateway.Application.csproj" />
+  <Project Path="NotificationGateway.Domain/NotificationGateway.Domain.csproj" />
+  <Project Path="NotificationGateway.Infrastructure/NotificationGateway.Infrastructure.csproj" />
+  <Project Path="NotificationGateway.Tests/NotificationGateway.Tests.csproj" />
+</Solution>
