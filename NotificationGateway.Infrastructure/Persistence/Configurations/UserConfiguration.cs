@@ -15,6 +15,16 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         b.Property(u => u.Role).HasMaxLength(50).IsRequired();
         b.HasIndex(u => new { u.TenantId, u.ApplicationId, u.Email }).IsUnique();
 
+        b.HasOne(u => u.Tenant)
+         .WithMany()
+         .HasForeignKey(u => u.TenantId)
+         .OnDelete(DeleteBehavior.Restrict);
+
+        b.HasOne(u => u.Application)
+         .WithMany()
+         .HasForeignKey(u => u.ApplicationId)
+         .OnDelete(DeleteBehavior.Restrict);
+
         b.HasMany(u => u.Templates)
          .WithOne(t => t.User)
          .HasForeignKey(t => t.UserId)

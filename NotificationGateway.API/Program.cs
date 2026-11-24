@@ -87,11 +87,18 @@ builder.Services.AddSwaggerGen(c =>
 
 // Database Context (SQL Server)
 var connString = builder.Configuration.GetConnectionString("DefaultConnection") 
+    ?? builder.Configuration.GetConnectionString("NotificationGatewayDb")
     ?? "Server=localhost;Database=NotificationGatewayDb;User Id=YOUR_SQL_USERNAME;Password=YOUR_SQL_PASSWORD;TrustServerCertificate=True;MultipleActiveResultSets=true";
 
 builder.Services.AddDbContext<NotificationGatewayDbContext>(opts =>
 {
-    opts.UseSqlServer(connString);
+    opts.UseSqlServer(connString, sqlOpts =>
+    {
+        sqlOpts.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    });
 });
 
 // Tenant Context & Repositories
@@ -165,7 +172,7 @@ builder.Services.AddScoped<OutboxProcessor>();
 
 var app = builder.Build();
 
-// Auto-create database & tables on startup when valid SQL Server connection is provided
+// Automatically apply EF Core migrations and seed default Tenant/Application on startup
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<NotificationGatewayDbContext>();
@@ -173,12 +180,35 @@ using (var scope = app.Services.CreateScope())
     {
         try
         {
-            db.Database.EnsureCreated();
-            app.Logger.LogInformation("SQL Server database and tables ensured successfully.");
+            db.Database.Migrate();
+            app.Logger.LogInformation("SQL Server database and all entity tables migrated/created successfully.");
+
+            // Seed default test tenant and application client if they don't exist
+            var defaultTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            var defaultAppId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+            if (!db.Tenants.Any(t => t.Id == defaultTenantId))
+            {
+                var defaultTenant = NotificationGateway.Domain.Entities.Tenant.Create("Default Tenant", "default-tenant");
+                typeof(NotificationGateway.Domain.Entities.Tenant).GetProperty("Id")!.SetValue(defaultTenant, defaultTenantId);
+                db.Tenants.Add(defaultTenant);
+
+                var defaultApp = NotificationGateway.Domain.Entities.ApplicationClient.Create(
+                    defaultTenantId,
+                    "Default Client App",
+                    "order-service",
+                    "hashed-api-key-sample",
+                    "prefix");
+                typeof(NotificationGateway.Domain.Entities.ApplicationClient).GetProperty("Id")!.SetValue(defaultApp, defaultAppId);
+                db.ApplicationClients.Add(defaultApp);
+
+                db.SaveChanges();
+                app.Logger.LogInformation("Default Tenant ({TenantId}) and ApplicationClient ({AppId}) seeded successfully.", defaultTenantId, defaultAppId);
+            }
         }
         catch (Exception ex)
         {
-            app.Logger.LogWarning("SQL Server connection attempt: {Message}. Please verify your username and password in appsettings.json.", ex.Message);
+            app.Logger.LogWarning("SQL Server migration attempt: {Message}. Please verify your username and password in appsettings.json.", ex.Message);
         }
     }
     else

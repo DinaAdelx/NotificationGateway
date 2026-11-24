@@ -42,6 +42,16 @@ public class NotificationTypeDefinitionConfiguration : IEntityTypeConfiguration<
         b.Property(t => t.DefaultLanguage).HasMaxLength(10).IsRequired();
         b.HasIndex(t => new { t.TenantId, t.ApplicationId, t.Code }).IsUnique();
 
+        b.HasOne(t => t.Tenant)
+         .WithMany()
+         .HasForeignKey(t => t.TenantId)
+         .OnDelete(DeleteBehavior.Restrict);
+
+        b.HasOne(t => t.Application)
+         .WithMany(a => a.NotificationTypes)
+         .HasForeignKey(t => t.ApplicationId)
+         .OnDelete(DeleteBehavior.Restrict);
+
         b.Property(t => t.AllowedChannels)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
