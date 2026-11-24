@@ -1,0 +1,120 @@
+/* Notification Gateway Modern UI Styles */
+:root {
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-primary);
+    background-color: #f8fafc;
+    min-height: 100vh;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    transition: background-color 0.3s ease;
+}
+
+.status-dot.connected {
+    background-color: #22c55e !important;
+    box-shadow: 0 0 8px #22c55e;
+}
+
+.status-dot.disconnected {
+    background-color: #ef4444 !important;
+}
+
+.status-dot.connecting {
+    background-color: #f59e0b !important;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.4; }
+    50% { opacity: 1; }
+    100% { opacity: 0.4; }
+}
+
+.card {
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.card-header {
+    border-bottom: 1px solid var(--card-border);
+    font-size: 0.95rem;
+}
+
+/* Notification Item */
+.notification-stream {
+    max-height: 520px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    background: #ffffff;
+    border-left: 4px solid #94a3b8;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    border: 1px solid #f1f5f9;
+    border-left-width: 4px;
+    transition: all 0.2s ease;
+}
+
+.notification-item.unread {
+    background: #f0f7ff;
+    border-left-color: #2563eb;
+}
+
+.notification-item:hover {
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08);
+}
+
+.notification-item.type-success {
+    border-left-color: #10b981;
+}
+
+.notification-item.type-warning {
+    border-left-color: #f59e0b;
+}
+
+.notification-item.type-urgent {
+    border-left-color: #ef4444;
+}
+
+/* Delivery badge colors */
+.badge-whatsapp { background-color: #25D366; color: white; }
+.badge-sms { background-color: #8b5cf6; color: white; }
+.badge-email { background-color: #3b82f6; color: white; }
+.badge-signalr { background-color: #f97316; color: white; }
+.badge-webhook { background-color: #06b6d4; color: white; }
+
+/* Json preview */
+pre.json-view {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    max-height: 250px;
+    overflow: auto;
+}
+
+.table-sm th, .table-sm td {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.85rem;
+}

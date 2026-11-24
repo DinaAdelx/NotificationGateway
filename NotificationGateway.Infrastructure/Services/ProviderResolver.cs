@@ -28,9 +28,27 @@ public class ProviderResolver(
         var configs = await configRepo.GetEnabledByChannelAsync(tenantId, applicationId, channel, ct);
 
         if (primaryCode is not null)
-            return configs.FirstOrDefault(c => c.ProviderCode.Equals(primaryCode, StringComparison.OrdinalIgnoreCase));
+        {
+            var match = configs.FirstOrDefault(c => c.ProviderCode.Equals(primaryCode, StringComparison.OrdinalIgnoreCase));
+            if (match != null) return match;
+        }
 
-        return configs.FirstOrDefault(c => c.IsPrimary) ?? configs.FirstOrDefault();
+        var selected = configs.FirstOrDefault(c => c.IsPrimary) ?? configs.FirstOrDefault();
+        if (selected != null) return selected;
+
+        // Auto-fallback default configuration for registered channels
+        var defaultCode = channel switch
+        {
+            NotificationChannel.SignalR => "SIGNALR",
+            NotificationChannel.Webhook => "WEBHOOK",
+            NotificationChannel.Sms => "SMS",
+            NotificationChannel.WhatsApp => "WHATSAPP",
+            NotificationChannel.Email => "SMTP",
+            NotificationChannel.InApp => "INAPP",
+            _ => "MOCK"
+        };
+
+        return TenantProviderConfiguration.Create(tenantId, applicationId, defaultCode, channel, "{}", null, true, 0);
     }
 
     public async Task<IReadOnlyList<TenantProviderConfiguration>> ResolveFallbacksAsync(

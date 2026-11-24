@@ -18,7 +18,8 @@ public class OutboxProcessor(
     public async Task ProcessAsync(CancellationToken ct = default)
     {
         var pending = await outboxRepo.GetPendingAsync(50, ct);
-        logger.LogInformation("OutboxProcessor: processing {Count} pending events", pending.Count);
+        if (pending.Count > 0)
+            logger.LogInformation("OutboxProcessor: processing {Count} pending events", pending.Count);
 
         foreach (var entry in pending)
         {
@@ -34,11 +35,13 @@ public class OutboxProcessor(
                 {
                     var recipientAddress = channel switch
                     {
-                        Domain.Enums.NotificationChannel.Email => payload.Recipient?.Email,
-                        Domain.Enums.NotificationChannel.Sms => payload.Recipient?.Phone,
-                        Domain.Enums.NotificationChannel.InApp => payload.Recipient?.ExternalUserId,
-                        Domain.Enums.NotificationChannel.SignalR => payload.Recipient?.ExternalUserId,
-                        _ => payload.Recipient?.Email
+                        Domain.Enums.NotificationChannel.Email => payload.Recipient?.Email ?? "recipient@example.com",
+                        Domain.Enums.NotificationChannel.Sms => payload.Recipient?.Phone ?? "+1234567890",
+                        Domain.Enums.NotificationChannel.WhatsApp => payload.Recipient?.Phone ?? "+1234567890",
+                        Domain.Enums.NotificationChannel.InApp => payload.Recipient?.ExternalUserId ?? "user_default",
+                        Domain.Enums.NotificationChannel.SignalR => payload.Recipient?.ExternalUserId ?? "user_default",
+                        Domain.Enums.NotificationChannel.Webhook => payload.Recipient?.WebhookUrl ?? "http://localhost:5022/api/webhooks/receive-test",
+                        _ => payload.Recipient?.Email ?? "recipient@example.com"
                     };
 
                     if (string.IsNullOrWhiteSpace(recipientAddress)) continue;
@@ -70,5 +73,5 @@ public class OutboxProcessor(
         string Language,
         RecipientPayload? Recipient);
 
-    private record RecipientPayload(string? ExternalUserId, string? Email, string? Phone, string? DeviceToken);
+    private record RecipientPayload(string? ExternalUserId, string? Email, string? Phone, string? DeviceToken, string? WebhookUrl);
 }

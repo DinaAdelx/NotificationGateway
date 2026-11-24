@@ -18,6 +18,13 @@ public class HandlebarsTemplateRenderer(ITemplateRepository templateRepo) : ITem
         if (template is null && language != "en")
             template = await templateRepo.GetActiveAsync(tenantId, applicationId, notificationTypeId, channel, "en", ct);
 
+        // Multi-channel fallback: if no channel-specific template exists, fall back to ANY active template for this notification type!
+        if (template is null)
+        {
+            var allTemplates = await templateRepo.GetAllAsync(tenantId, applicationId, null, notificationTypeId, ct);
+            template = allTemplates.FirstOrDefault(t => t.Status == TemplateStatus.Active);
+        }
+
         if (template is null) return null;
 
         return Preview(template.ContentJson, template.Subject, payloadJson);

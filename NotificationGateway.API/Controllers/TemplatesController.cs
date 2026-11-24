@@ -52,6 +52,9 @@ public class TemplatesController(
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTemplateRequest request, CancellationToken ct)
     {
+        if (context.TenantId == Guid.Empty || context.ApplicationId == Guid.Empty)
+            return Unauthorized(new { message = "Valid tenant and application context are required (via X-Tenant-Id / X-Application-Id headers or claims)." });
+
         // Associate with specified user, or with the currently authenticated client if it's a User GUID
         Guid? templateUserId = request.UserId;
         if (!templateUserId.HasValue && Guid.TryParse(context.ClientId, out var parsedClientId))
@@ -59,19 +62,26 @@ public class TemplatesController(
             templateUserId = parsedClientId;
         }
 
-        var cmd = new CreateTemplateCommand(
-            context.TenantId,
-            context.ApplicationId,
-            request.NotificationTypeDefinitionId,
-            request.Channel,
-            request.Language,
-            request.Content.GetRawText(),
-            request.Subject,
-            request.Variables,
-            templateUserId);
+        try
+        {
+            var cmd = new CreateTemplateCommand(
+                context.TenantId,
+                context.ApplicationId,
+                request.NotificationTypeDefinitionId,
+                request.Channel,
+                request.Language,
+                request.Content.GetRawText(),
+                request.Subject,
+                request.Variables,
+                templateUserId);
 
-        var result = await mediator.Send(cmd, ct);
-        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            var result = await mediator.Send(cmd, ct);
+            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("{id:guid}/publish")]

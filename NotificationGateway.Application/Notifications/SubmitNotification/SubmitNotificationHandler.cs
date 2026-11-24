@@ -24,7 +24,8 @@ public record RecipientDto(
     string? ExternalUserId,
     string? Email,
     string? Phone,
-    string? DeviceToken);
+    string? DeviceToken,
+    string? WebhookUrl = null);
 
 public record SubmitNotificationResult(
     Guid NotificationId,

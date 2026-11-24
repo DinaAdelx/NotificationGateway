@@ -74,10 +74,63 @@ public class NotificationsController(
         return Ok(new { message = "Notification cancellation requested." });
     }
 
+    public record DeliveryAttemptDto(
+        Guid Id,
+        int AttemptNumber,
+        string ProviderCode,
+        string? ProviderMessageId,
+        string Status,
+        string FailureCategory,
+        string? ErrorCode,
+        string? SafeErrorMessage,
+        bool IsRetryable,
+        DateTime StartedAt,
+        DateTime? CompletedAt,
+        int? DurationMilliseconds);
+
+    public record DeliveryDto(
+        Guid Id,
+        Guid NotificationId,
+        string Channel,
+        string? RecipientExternalUserId,
+        string RecipientAddress,
+        string Status,
+        int AttemptCount,
+        DateTime? NextAttemptAt,
+        DateTime CreatedAt,
+        DateTime? CompletedAt,
+        IReadOnlyList<DeliveryAttemptDto> Attempts);
+
     [HttpGet("{id:guid}/deliveries")]
     public async Task<IActionResult> GetDeliveries(Guid id, CancellationToken ct)
     {
         var deliveries = await deliveryRepo.GetByNotificationAsync(context.TenantId, id, ct);
-        return Ok(deliveries);
+        var dtos = deliveries.Select(d => new DeliveryDto(
+            d.Id,
+            d.NotificationId,
+            d.Channel.ToString(),
+            d.RecipientExternalUserId,
+            d.RecipientAddress,
+            d.Status.ToString(),
+            d.AttemptCount,
+            d.NextAttemptAt,
+            d.CreatedAt,
+            d.CompletedAt,
+            d.Attempts.Select(a => new DeliveryAttemptDto(
+                a.Id,
+                a.AttemptNumber,
+                a.ProviderCode,
+                a.ProviderMessageId,
+                a.Status.ToString(),
+                a.FailureCategory.ToString(),
+                a.ErrorCode,
+                a.SafeErrorMessage,
+                a.IsRetryable,
+                a.StartedAt,
+                a.CompletedAt,
+                a.DurationMilliseconds)).ToList()
+        )).ToList();
+
+        return Ok(dtos);
     }
 }
