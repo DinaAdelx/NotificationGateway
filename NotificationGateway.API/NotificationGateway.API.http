@@ -156,3 +156,54 @@ X-Application-Id: {{AppId}}
 POST {{Host}}/api/v1/templates/00000000-0000-0000-0000-000000000000/publish
 X-Tenant-Id: {{TenantId}}
 X-Application-Id: {{AppId}}
+Authorization: Bearer {{adminLogin.response.body.$.token}}
+
+###
+
+### 11. Register Admin & Customer Users + Query Admin Dashboard
+# @name adminRegister
+POST {{Host}}/api/v1/auth/register
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+
+{
+  "email": "admin.demo@example.com",
+  "password": "AdminPassword123!",
+  "fullName": "Gateway Admin",
+  "role": "Admin"
+}
+
+###
+
+POST {{Host}}/api/v1/auth/register
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+
+{
+  "email": "customer.demo@example.com",
+  "password": "CustomerPassword123!",
+  "fullName": "Demo Customer",
+  "role": "Customer"
+}
+
+###
+
+# @name adminLogin
+POST {{Host}}/api/v1/auth/login
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+
+{
+  "email": "admin.demo@example.com",
+  "password": "AdminPassword123!"
+}
+
+###
+
+GET {{Host}}/api/v1/admin/dashboard?channel=Email
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+Authorization: Bearer {{adminLogin.response.body.$.token}}

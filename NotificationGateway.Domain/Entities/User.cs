@@ -8,7 +8,7 @@ public class User
     public string Email { get; private set; } = string.Empty;
     public string PasswordHash { get; private set; } = string.Empty;
     public string FullName { get; private set; } = string.Empty;
-    public string Role { get; private set; } = "User"; // Admin, Manager, User
+    public string Role { get; private set; } = "Customer"; // Admin, Customer
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
@@ -25,10 +25,18 @@ public class User
         string email,
         string passwordHash,
         string fullName,
-        string role = "User")
+        string role = "Customer")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+
+        var normalizedRole = string.IsNullOrWhiteSpace(role) ? "Customer" : role.Trim();
+        if (normalizedRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            normalizedRole = "Admin";
+        else if (normalizedRole.Equals("Customer", StringComparison.OrdinalIgnoreCase))
+            normalizedRole = "Customer";
+        else
+            throw new ArgumentException("Role must be either 'Admin' or 'Customer'.", nameof(role));
 
         return new User
         {
@@ -38,7 +46,7 @@ public class User
             Email = email.Trim().ToLowerInvariant(),
             PasswordHash = passwordHash,
             FullName = fullName,
-            Role = role,
+            Role = normalizedRole,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };

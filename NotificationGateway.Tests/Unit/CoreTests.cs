@@ -176,6 +176,28 @@ public class MultiProviderTests
         rendered.Body.Should().Contain("\"customerName\":\"Dina\"");
     }
 
+    [Theory]
+    [InlineData("Admin", "Admin")]
+    [InlineData("admin", "Admin")]
+    [InlineData("Customer", "Customer")]
+    [InlineData("customer", "Customer")]
+    public void User_Create_AcceptsAdminAndCustomerRoles(string inputRole, string expectedRole)
+    {
+        var user = NotificationGateway.Domain.Entities.User.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "test@example.com", "hash", "Test User", inputRole);
+
+        user.Role.Should().Be(expectedRole);
+    }
+
+    [Fact]
+    public void User_Create_RejectsInvalidRole()
+    {
+        Action act = () => NotificationGateway.Domain.Entities.User.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "test@example.com", "hash", "Test User", "SuperHacker");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
     private class InMemoryTemplateRepoStub : NotificationGateway.Domain.Interfaces.ITemplateRepository
     {
         public Task<NotificationGateway.Domain.Entities.NotificationTemplate?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken ct = default) => Task.FromResult<NotificationGateway.Domain.Entities.NotificationTemplate?>(null);

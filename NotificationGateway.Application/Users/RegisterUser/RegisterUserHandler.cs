@@ -11,12 +11,13 @@ public record RegisterUserCommand(
     string Email,
     string Password,
     string FullName,
-    string Role = "User") : IRequest<RegisterUserResult>;
+    string Role = "Customer") : IRequest<RegisterUserResult>;
 
 public record RegisterUserResult(
     Guid UserId,
     string Email,
     string FullName,
+    string Role,
     string Token);
 
 public class RegisterUserHandler(
@@ -46,6 +47,6 @@ public class RegisterUserHandler(
         await uow.SaveChangesAsync(ct);
 
         var token = jwtService.GenerateToken(user);
-        return new RegisterUserResult(user.Id, user.Email, user.FullName, token);
+        return new RegisterUserResult(user.Id, user.Email, user.FullName, user.Role, token);
     }
 }

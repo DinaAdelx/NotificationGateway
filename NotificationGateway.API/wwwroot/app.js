@@ -13,14 +13,74 @@ class NotificationGatewayApp {
         this.audioCtx = null;
         this.soundEnabled = true;
         this.lastNotificationId = null;
+        this.auth = this.loadAuth();
 
         this.init();
     }
 
     async init() {
         this.bindUiEvents();
+        this.updateAuthUi();
         await this.startSignalR();
         this.pollDeliveries();
+    }
+
+    loadAuth() {
+        try {
+            const raw = localStorage.getItem('ng_auth');
+            return raw ? JSON.parse(raw) : null;
+        } catch {
+            return null;
+        }
+    }
+
+    saveAuth(authObj) {
+        this.auth = authObj;
+        if (authObj) localStorage.setItem('ng_auth', JSON.stringify(authObj));
+        else localStorage.removeItem('ng_auth');
+        this.updateAuthUi();
+    }
+
+    getAuthHeaders(includeJson = false) {
+        const headers = {
+            'X-Tenant-Id': this.tenantId,
+            'X-Application-Id': this.applicationId
+        };
+        if (includeJson) headers['Content-Type'] = 'application/json';
+        if (this.auth?.token) headers['Authorization'] = `Bearer ${this.auth.token}`;
+        return headers;
+    }
+
+    updateAuthUi() {
+        const btnOpen = document.getElementById('btnOpenAuthModal');
+        const userBadge = document.getElementById('authUserBadge');
+        const adminTabLi = document.getElementById('tab-admin-li');
+
+        if (this.auth && this.auth.token) {
+            btnOpen.classList.add('d-none');
+            userBadge.classList.remove('d-none');
+            document.getElementById('authUserName').textContent = this.auth.fullName || this.auth.email;
+            const roleEl = document.getElementById('authUserRole');
+            roleEl.textContent = this.auth.role;
+            roleEl.className = this.auth.role === 'Admin' ? 'badge bg-danger me-2' : 'badge bg-info text-dark me-2';
+
+            if (this.auth.role === 'Admin') {
+                adminTabLi.classList.remove('d-none');
+                this.loadAdminDashboard();
+            } else {
+                adminTabLi.classList.add('d-none');
+                if (document.getElementById('tab-admin').classList.contains('active')) {
+                    bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-signalr')).show();
+                }
+            }
+        } else {
+            btnOpen.classList.remove('d-none');
+            userBadge.classList.add('d-none');
+            adminTabLi.classList.add('d-none');
+            if (document.getElementById('tab-admin').classList.contains('active')) {
+                bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-signalr')).show();
+            }
+        }
     }
 
     // Pure Browser Web Audio API Synthesizer (Zero External MP3/Audio File Dependencies)
@@ -262,11 +322,7 @@ class NotificationGatewayApp {
         try {
             const resp = await fetch('/api/v1/notifications', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Tenant-Id': this.tenantId,
-                    'X-Application-Id': this.applicationId
-                },
+                headers: this.getAuthHeaders(true),
                 body: JSON.stringify(requestBody)
             });
 
@@ -299,10 +355,7 @@ class NotificationGatewayApp {
 
         try {
             const resp = await fetch(`/api/v1/notifications/${this.lastNotificationId}/deliveries`, {
-                headers: {
-                    'X-Tenant-Id': this.tenantId,
-                    'X-Application-Id': this.applicationId
-                }
+                headers: this.getAuthHeaders(false)
             });
 
             if (!resp.ok) return;
@@ -454,6 +507,131 @@ class NotificationGatewayApp {
                 trackingUrl: "https://track.dhl.com/package"
             }, null, 2);
         });
+
+        document.getElementById('btnLoginSubmit').addEventListener('click', () => this.login());
+        document.getElementById('btnRegisterSubmit').addEventListener('click', () => this.register());
+        document.getElementById('btnLogout').addEventListener('click', () => this.saveAuth(null));
+        document.getElementById('btnAdminApplyFilters').addEventListener('click', () => this.loadAdminDashboard());
+        document.getElementById('btnAdminResetFilters').addEventListener('click', () => {
+            document.getElementById('adminFilterSearch').value = '';
+            document.getElementById('adminFilterRole').value = '';
+            document.getElementById('adminFilterChannel').value = '';
+            document.getElementById('adminFilterStatus').value = '';
+            this.loadAdminDashboard();
+        });
+        document.getElementById('tab-admin').addEventListener('shown.bs.tab', () => this.loadAdminDashboard());
+    }
+
+    async login() {
+        const errEl = document.getElementById('loginErrorAlert');
+        errEl.classList.add('d-none');
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+
+        try {
+            const resp = await fetch('/api/v1/auth/login', {
+                method: 'POST',
+                headers: this.getAuthHeaders(true),
+                body: JSON.stringify({ email, password })
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.message || 'Login failed');
+            this.saveAuth(data);
+            bootstrap.Modal.getInstance(document.getElementById('authModal'))?.hide();
+        } catch (err) {
+            errEl.textContent = err.message;
+            errEl.classList.remove('d-none');
+        }
+    }
+
+    async register() {
+        const errEl = document.getElementById('registerErrorAlert');
+        errEl.classList.add('d-none');
+        const fullName = document.getElementById('regFullName').value.trim();
+        const email = document.getElementById('regEmail').value.trim();
+        const password = document.getElementById('regPassword').value;
+        const role = document.getElementById('regRole').value;
+
+        try {
+            const resp = await fetch('/api/v1/auth/register', {
+                method: 'POST',
+                headers: this.getAuthHeaders(true),
+                body: JSON.stringify({ fullName, email, password, role })
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.message || 'Registration failed');
+            this.saveAuth(data);
+            bootstrap.Modal.getInstance(document.getElementById('authModal'))?.hide();
+        } catch (err) {
+            errEl.textContent = err.message;
+            errEl.classList.remove('d-none');
+        }
+    }
+
+    async loadAdminDashboard() {
+        if (this.auth?.role !== 'Admin') return;
+
+        const params = new URLSearchParams();
+        const search = document.getElementById('adminFilterSearch')?.value.trim();
+        const role = document.getElementById('adminFilterRole')?.value;
+        const channel = document.getElementById('adminFilterChannel')?.value;
+        const status = document.getElementById('adminFilterStatus')?.value;
+        if (search) params.set('search', search);
+        if (role) params.set('role', role);
+        if (channel) params.set('channel', channel);
+        if (status) params.set('status', status);
+
+        try {
+            const resp = await fetch(`/api/v1/admin/dashboard?${params.toString()}`, {
+                headers: this.getAuthHeaders(false)
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            const s = data.summary;
+            document.getElementById('kpiTotalUsers').textContent = s.totalUsers;
+            document.getElementById('kpiAdminCount').textContent = s.adminCount;
+            document.getElementById('kpiCustomerCount').textContent = s.customerCount;
+            document.getElementById('kpiNotifTypes').textContent = s.totalNotificationTypes;
+            document.getElementById('kpiTemplates').textContent = s.totalTemplates;
+            document.getElementById('kpiSentDeliveries').textContent = s.sentDeliveries;
+            document.getElementById('kpiTotalDeliveries').textContent = s.totalDeliveries;
+            document.getElementById('kpiFailedDeliveries').textContent = s.failedDeliveries;
+            document.getElementById('kpiTotalNotifications').textContent = s.totalNotifications;
+
+            document.getElementById('adminUsersBody').innerHTML = data.users.length === 0
+                ? '<tr><td colspan="4" class="text-center text-muted py-3">No users match filters.</td></tr>'
+                : data.users.map(u => `
+                    <tr>
+                        <td>${this.escapeHtml(u.fullName)}</td>
+                        <td class="font-monospace">${this.escapeHtml(u.email)}</td>
+                        <td><span class="badge ${u.role === 'Admin' ? 'bg-danger' : 'bg-info text-dark'}">${this.escapeHtml(u.role)}</span></td>
+                        <td class="text-muted">${new Date(u.createdAt).toLocaleDateString()}</td>
+                    </tr>`).join('');
+
+            document.getElementById('adminTypesBody').innerHTML = data.notificationTypes.length === 0
+                ? '<tr><td colspan="3" class="text-center text-muted py-3">No types match filters.</td></tr>'
+                : data.notificationTypes.map(t => `
+                    <tr>
+                        <td class="font-monospace fw-semibold">${this.escapeHtml(t.code)}</td>
+                        <td>${(t.allowedChannels || []).map(c => `<span class="badge bg-light text-dark border me-1">${this.escapeHtml(c)}</span>`).join('')}</td>
+                        <td><span class="badge bg-primary-subtle text-primary">${t.templateCount}</span></td>
+                    </tr>`).join('');
+
+            document.getElementById('adminDeliveriesBody').innerHTML = data.recentDeliveries.length === 0
+                ? '<tr><td colspan="6" class="text-center text-muted py-3">No deliveries match filters.</td></tr>'
+                : data.recentDeliveries.map(d => `
+                    <tr>
+                        <td class="font-monospace">${this.escapeHtml(d.notificationType)}</td>
+                        <td><span class="badge badge-${String(d.channel).toLowerCase()}">${this.escapeHtml(d.channel)}</span></td>
+                        <td class="font-monospace text-truncate" style="max-width:150px;">${this.escapeHtml(d.recipientAddress)}</td>
+                        <td><span class="badge ${d.status === 'Sent' || d.status === 'Delivered' ? 'bg-success' : d.status === 'Failed' ? 'bg-danger' : 'bg-secondary'}">${this.escapeHtml(d.status)}</span></td>
+                        <td>${d.attemptCount}</td>
+                        <td class="text-muted">${new Date(d.createdAt).toLocaleTimeString()}</td>
+                    </tr>`).join('');
+        } catch (err) {
+            console.warn('Admin dashboard load error:', err);
+        }
     }
 
     escapeHtml(text) {

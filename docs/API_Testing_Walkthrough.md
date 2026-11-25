@@ -44,9 +44,11 @@ Open in your browser:
 
 ---
 
-## Step 1: Register a New User
+## Step 1: Register a New User (`Admin` or `Customer`)
 
-Creates an authenticated user under the current tenant and application client.
+Creates an authenticated user under the current tenant and application client. Allowed roles are **`Admin`** and **`Customer`** (defaults to `Customer` if omitted):
+- **`Admin`**: Allowed to view and use **all APIs** (including provider configurations, notification type registration, template creation/publishing) plus the **Admin Dashboard** in the Web UI (`http://localhost:5022/`) and `GET /api/v1/admin/dashboard`.
+- **`Customer`**: Sees only the standard notification dispatch, SignalR live feed, delivery tracker, and webhook inspector UI.
 
 - **Method**: `POST`
 - **URL**: `/api/v1/auth/register`
@@ -56,7 +58,7 @@ Creates an authenticated user under the current tenant and application client.
   "email": "sarah.dev@example.com",
   "password": "SecurePassword123!",
   "fullName": "Sarah Developer",
-  "role": "Manager"
+  "role": "Admin"
 }
 ```
 
@@ -386,3 +388,17 @@ Re-send the request from **Step 8** with the exact same `Idempotency-Key: test-o
 Notice that:
 - It returns `isDuplicate: true`.
 - It returns the original tracking ID without generating duplicate outbox entries or duplicate deliveries.
+
+---
+
+## Step 11: Query the Admin Dashboard (`Admin` Role Only)
+
+Requires a Bearer JWT token for a user with `"role": "Admin"`.
+
+- **Method**: `GET`
+- **URL**: `/api/v1/admin/dashboard?role=Customer&channel=Email&status=Sent&search=ORD`
+- **Returns**:
+  - `summary`: `totalUsers`, `adminCount`, `customerCount`, `totalNotificationTypes`, `totalTemplates`, `totalNotifications`, `totalDeliveries`, `sentDeliveries`, `failedDeliveries`
+  - `users`: Filtered list of registered users
+  - `notificationTypes`: Filtered list of notification types with active template counts
+  - `recentDeliveries`: Latest 50 deliveries matching the selected filters

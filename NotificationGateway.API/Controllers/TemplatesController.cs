@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NotificationGateway.API.Authentication;
 using NotificationGateway.Application.Templates.CreateTemplate;
@@ -50,6 +51,7 @@ public class TemplatesController(
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreateTemplateRequest request, CancellationToken ct)
     {
         if (context.TenantId == Guid.Empty || context.ApplicationId == Guid.Empty)
@@ -85,6 +87,7 @@ public class TemplatesController(
     }
 
     [HttpPost("{id:guid}/publish")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Publish(Guid id, CancellationToken ct)
     {
         var success = await mediator.Send(new PublishTemplateCommand(context.TenantId, context.ApplicationId, id), ct);

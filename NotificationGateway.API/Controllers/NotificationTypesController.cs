@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NotificationGateway.API.Authentication;
 using NotificationGateway.Application.Abstractions;
@@ -43,6 +44,7 @@ public class NotificationTypesController(
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Register([FromBody] RegisterTypeRequest request, CancellationToken ct)
     {
         var cmd = new RegisterNotificationTypeCommand(
@@ -70,6 +72,7 @@ public class NotificationTypesController(
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         await repo.DeleteAsync(context.TenantId, id, ct);

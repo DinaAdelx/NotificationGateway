@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NotificationGateway.API.Authentication;
 using NotificationGateway.Domain.Entities;
@@ -9,6 +10,7 @@ namespace NotificationGateway.API.Controllers;
 
 [ApiController]
 [Route("api/v1/provider-configurations")]
+[Authorize(Roles = "Admin")]
 public class ProviderConfigurationsController(
     NotificationContext context,
     IProviderConfigurationRepository repo,

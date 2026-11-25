@@ -16,7 +16,7 @@ public class AuthController(
         string Email,
         string Password,
         string FullName,
-        string Role = "User");
+        string Role = "Customer");
 
     public record LoginRequest(
         string Email,
@@ -40,6 +40,10 @@ public class AuthController(
 
             var result = await mediator.Send(cmd, ct);
             return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

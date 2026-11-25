@@ -47,6 +47,19 @@
                     </span>
                 </div>
 
+                <!-- Auth Controls (Login/Register or Current User + Role Badge) -->
+                <button id="btnOpenAuthModal" class="btn btn-outline-light btn-sm me-3" data-bs-toggle="modal" data-bs-target="#authModal">
+                    <i class="bi bi-person-circle me-1"></i> Login / Register
+                </button>
+                <div id="authUserBadge" class="d-none d-flex align-items-center me-3 text-light small">
+                    <i class="bi bi-person-check-fill text-success me-1"></i>
+                    <span id="authUserName" class="fw-semibold me-2"></span>
+                    <span id="authUserRole" class="badge me-2"></span>
+                    <button id="btnLogout" class="btn btn-sm btn-outline-secondary text-light py-0 px-2" title="Logout">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </button>
+                </div>
+
                 <!-- Swagger UI Direct Link -->
                 <a href="/swagger" target="_blank" class="btn btn-warning btn-sm fw-bold shadow-sm d-flex align-items-center">
                     <i class="bi bi-file-earmark-code me-1 fs-6"></i> Swagger API Docs
@@ -190,6 +203,11 @@
                             <i class="bi bi-cloud-arrow-up-fill text-info me-1"></i> Webhooks Receiver (<span id="webhookCount">0</span>)
                         </button>
                     </li>
+                    <li class="nav-item d-none" id="tab-admin-li" role="presentation">
+                        <button class="nav-link fw-semibold" id="tab-admin" data-bs-toggle="pill" data-bs-target="#pane-admin" type="button">
+                            <i class="bi bi-shield-lock-fill text-danger me-1"></i> Admin Dashboard
+                        </button>
+                    </li>
                 </ul>
 
                 <div class="tab-content" id="viewTabsContent">
@@ -283,10 +301,211 @@
                         </div>
                     </div>
 
+                    <!-- TAB 4: Admin Dashboard (Visible ONLY to Admin role) -->
+                    <div class="tab-pane fade" id="pane-admin" role="tabpanel">
+                        <!-- KPI Summary Cards -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-6 col-md-3">
+                                <div class="card shadow-sm border-start border-primary border-4">
+                                    <div class="card-body py-2">
+                                        <div class="text-muted small">Total Users</div>
+                                        <div class="fs-4 fw-bold" id="kpiTotalUsers">0</div>
+                                        <div class="small text-muted"><span id="kpiAdminCount">0</span> Admin · <span id="kpiCustomerCount">0</span> Customer</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="card shadow-sm border-start border-warning border-4">
+                                    <div class="card-body py-2">
+                                        <div class="text-muted small">Notification Types</div>
+                                        <div class="fs-4 fw-bold" id="kpiNotifTypes">0</div>
+                                        <div class="small text-muted"><span id="kpiTemplates">0</span> Templates</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="card shadow-sm border-start border-success border-4">
+                                    <div class="card-body py-2">
+                                        <div class="text-muted small">Sent / Delivered</div>
+                                        <div class="fs-4 fw-bold text-success" id="kpiSentDeliveries">0</div>
+                                        <div class="small text-muted">of <span id="kpiTotalDeliveries">0</span> total</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="card shadow-sm border-start border-danger border-4">
+                                    <div class="card-body py-2">
+                                        <div class="text-muted small">Failed Deliveries</div>
+                                        <div class="fs-4 fw-bold text-danger" id="kpiFailedDeliveries">0</div>
+                                        <div class="small text-muted"><span id="kpiTotalNotifications">0</span> Notifications</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filters Bar -->
+                        <div class="card shadow-sm mb-3">
+                            <div class="card-body py-2">
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold mb-1">Search</label>
+                                        <input id="adminFilterSearch" type="text" class="form-control form-control-sm" placeholder="Email, name, type, recipient...">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small fw-semibold mb-1">User Role</label>
+                                        <select id="adminFilterRole" class="form-select form-select-sm">
+                                            <option value="">All Roles</option>
+                                            <option value="Admin">Admin</option>
+                                            <option value="Customer">Customer</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small fw-semibold mb-1">Channel</label>
+                                        <select id="adminFilterChannel" class="form-select form-select-sm">
+                                            <option value="">All Channels</option>
+                                            <option value="Email">Email</option>
+                                            <option value="Sms">Sms</option>
+                                            <option value="WhatsApp">WhatsApp</option>
+                                            <option value="SignalR">SignalR</option>
+                                            <option value="Webhook">Webhook</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small fw-semibold mb-1">Delivery Status</label>
+                                        <select id="adminFilterStatus" class="form-select form-select-sm">
+                                            <option value="">All Statuses</option>
+                                            <option value="Sent">Sent</option>
+                                            <option value="Delivered">Delivered</option>
+                                            <option value="Failed">Failed</option>
+                                            <option value="Retrying">Retrying</option>
+                                            <option value="Pending">Pending</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 d-flex gap-2">
+                                        <button id="btnAdminApplyFilters" class="btn btn-primary btn-sm flex-grow-1">
+                                            <i class="bi bi-funnel-fill me-1"></i> Apply Filters
+                                        </button>
+                                        <button id="btnAdminResetFilters" class="btn btn-outline-secondary btn-sm">
+                                            Reset
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Users & Notification Types -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white fw-bold py-2">
+                                        <i class="bi bi-people-fill text-primary me-1"></i> Registered Users
+                                    </div>
+                                    <div class="card-body p-0 table-responsive" style="max-height: 240px;">
+                                        <table class="table table-sm table-hover mb-0 small">
+                                            <thead class="table-light">
+                                                <tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr>
+                                            </thead>
+                                            <tbody id="adminUsersBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white fw-bold py-2">
+                                        <i class="bi bi-tags-fill text-warning me-1"></i> Notification Types
+                                    </div>
+                                    <div class="card-body p-0 table-responsive" style="max-height: 240px;">
+                                        <table class="table table-sm table-hover mb-0 small">
+                                            <thead class="table-light">
+                                                <tr><th>Code</th><th>Channels</th><th>Templates</th></tr>
+                                            </thead>
+                                            <tbody id="adminTypesBody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtered Deliveries -->
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-white fw-bold py-2">
+                                <i class="bi bi-activity text-success me-1"></i> Filtered Deliveries
+                            </div>
+                            <div class="card-body p-0 table-responsive" style="max-height: 260px;">
+                                <table class="table table-sm table-hover mb-0 small">
+                                    <thead class="table-light">
+                                        <tr><th>Type</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Created</th></tr>
+                                    </thead>
+                                    <tbody id="adminDeliveriesBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
             </div>
 
+        </div>
+    </div>
+
+    <!-- Login / Register Modal -->
+    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-person-badge me-2 text-primary"></i>Account Access</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#auth-login-pane" type="button">Login</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#auth-register-pane" type="button">Register</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="auth-login-pane">
+                            <div id="loginErrorAlert" class="alert alert-danger py-2 small d-none"></div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Email</label>
+                                <input id="loginEmail" type="email" class="form-control form-control-sm" placeholder="admin@example.com">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Password</label>
+                                <input id="loginPassword" type="password" class="form-control form-control-sm">
+                            </div>
+                            <button id="btnLoginSubmit" class="btn btn-primary btn-sm w-100 fw-semibold">Login</button>
+                        </div>
+                        <div class="tab-pane fade" id="auth-register-pane">
+                            <div id="registerErrorAlert" class="alert alert-danger py-2 small d-none"></div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Full Name</label>
+                                <input id="regFullName" type="text" class="form-control form-control-sm" placeholder="Dina Adel">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Email</label>
+                                <input id="regEmail" type="email" class="form-control form-control-sm" placeholder="user@example.com">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Password</label>
+                                <input id="regPassword" type="password" class="form-control form-control-sm">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Role</label>
+                                <select id="regRole" class="form-select form-select-sm">
+                                    <option value="Customer" selected>Customer (Standard UI)</option>
+                                    <option value="Admin">Admin (All APIs + Admin Dashboard)</option>
+                                </select>
+                            </div>
+                            <button id="btnRegisterSubmit" class="btn btn-success btn-sm w-100 fw-semibold">Create Account</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

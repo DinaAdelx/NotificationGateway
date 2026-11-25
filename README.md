@@ -19,7 +19,7 @@ A standalone, multi-tenant notification gateway built with **.NET 9** and **Clea
 
 | Interface | URL | Purpose |
 |---|---|---|
-| **Web Test UI** | **`http://localhost:5022/`** | Interactive dashboard to dispatch notifications across all 5 channels, watch live **SignalR** push notifications, track delivery attempts, and inspect incoming **HMAC-SHA256 Webhooks** |
+| **Web Test UI** | **`http://localhost:5022/`** | Interactive dashboard to dispatch notifications across all 5 channels, watch live **SignalR** push notifications, track delivery attempts, and inspect incoming **HMAC-SHA256 Webhooks**. Includes **Login / Register (`Admin` or `Customer`)** — `Admin` unlocks the **Admin Dashboard** (users count, notification types, and filters), while `Customer` sees only the standard UI. |
 | **Swagger API Docs** | **`http://localhost:5022/swagger`** | Full OpenAPI / Swagger UI for testing all REST endpoints |
 | **HTTP Test File** | [`NotificationGateway.API/NotificationGateway.API.http`](NotificationGateway.API/NotificationGateway.API.http) | Ready-to-run REST requests for Visual Studio / VS Code |
 
