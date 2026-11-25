@@ -17,23 +17,32 @@ public class ProviderResolver(
     public async Task<TenantProviderConfiguration?> ResolveAsync(
         Guid tenantId, Guid applicationId,
         NotificationChannel channel, Guid? notificationTypeId,
-        NotificationPriority priority, CancellationToken ct)
+        NotificationPriority priority, CancellationToken ct,
+        Guid? userId = null)
     {
-        // Check routing rules first
+        var configs = await configRepo.GetEnabledByChannelAsync(tenantId, applicationId, channel, ct);
+
+        // 1. Per-user saved provider settings take highest priority
+        if (userId.HasValue)
+        {
+            var userConfig = configs.FirstOrDefault(c => c.UserId == userId.Value);
+            if (userConfig is not null) return userConfig;
+        }
+
+        // 2. Tenant-wide routing rules & configurations (UserId == null)
+        var tenantConfigs = configs.Where(c => c.UserId == null).ToList();
         var rules = await routingRepo.GetActiveRulesAsync(tenantId, applicationId, channel, notificationTypeId, ct);
         var rule = rules.FirstOrDefault(r => r.Priority == null || r.Priority == priority) ?? rules.FirstOrDefault();
 
         string? primaryCode = rule?.PrimaryProviderCode;
 
-        var configs = await configRepo.GetEnabledByChannelAsync(tenantId, applicationId, channel, ct);
-
         if (primaryCode is not null)
         {
-            var match = configs.FirstOrDefault(c => c.ProviderCode.Equals(primaryCode, StringComparison.OrdinalIgnoreCase));
+            var match = tenantConfigs.FirstOrDefault(c => c.ProviderCode.Equals(primaryCode, StringComparison.OrdinalIgnoreCase));
             if (match != null) return match;
         }
 
-        var selected = configs.FirstOrDefault(c => c.IsPrimary) ?? configs.FirstOrDefault();
+        var selected = tenantConfigs.FirstOrDefault(c => c.IsPrimary) ?? tenantConfigs.FirstOrDefault() ?? configs.FirstOrDefault();
         if (selected != null) return selected;
 
         // Auto-fallback default configuration for registered channels

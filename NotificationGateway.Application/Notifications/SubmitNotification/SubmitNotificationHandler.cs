@@ -18,7 +18,8 @@ public record SubmitNotificationCommand(
     string? IdempotencyKey,
     string? CorrelationId,
     JsonElement? Metadata,
-    DateTime? ScheduledAt) : IRequest<SubmitNotificationResult>;
+    DateTime? ScheduledAt,
+    Guid? UserId = null) : IRequest<SubmitNotificationResult>;
 
 public record RecipientDto(
     string? ExternalUserId,
@@ -74,7 +75,7 @@ public class SubmitNotificationHandler(
             notifType.Id, notifType.Code, notifType.SchemaVersion,
             payloadJson, request.Priority,
             request.IdempotencyKey, request.CorrelationId,
-            request.Metadata?.GetRawText(), request.ScheduledAt);
+            request.Metadata?.GetRawText(), request.ScheduledAt, request.UserId);
 
         await notificationRepo.AddAsync(notification, ct);
 

@@ -100,8 +100,23 @@ public class SmsNotificationProvider(
         }
     }
 
+    private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
+
     private VonageSmsConfig? ResolveConfig(string? dbConfigJson)
     {
+        // Priority 1: Per-tenant DB ConfigurationJson (editable via UI/API)
+        if (!string.IsNullOrWhiteSpace(dbConfigJson) && dbConfigJson != "{}")
+        {
+            try
+            {
+                var dbCfg = JsonSerializer.Deserialize<VonageSmsConfig>(dbConfigJson, _jsonOpts);
+                if (dbCfg is not null && !string.IsNullOrWhiteSpace(dbCfg.ApiKey) && !string.IsNullOrWhiteSpace(dbCfg.ApiSecret))
+                    return dbCfg;
+            }
+            catch { /* fall through */ }
+        }
+
+        // Priority 2: appsettings.json "Sms" section
         var apiKey = configuration["Sms:ApiKey"];
         var apiSecret = configuration["Sms:ApiSecret"];
         var senderId = configuration["Sms:SenderId"];
@@ -109,12 +124,6 @@ public class SmsNotificationProvider(
         if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(apiSecret))
         {
             return new VonageSmsConfig(apiKey, apiSecret, senderId);
-        }
-
-        if (!string.IsNullOrWhiteSpace(dbConfigJson))
-        {
-            try { return JsonSerializer.Deserialize<VonageSmsConfig>(dbConfigJson); }
-            catch { /* fall through */ }
         }
 
         return null;

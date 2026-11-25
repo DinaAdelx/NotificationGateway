@@ -55,6 +55,7 @@ class NotificationGatewayApp {
         const btnOpen = document.getElementById('btnOpenAuthModal');
         const userBadge = document.getElementById('authUserBadge');
         const adminTabLi = document.getElementById('tab-admin-li');
+        const providersTabLi = document.getElementById('tab-providers-li');
 
         if (this.auth && this.auth.token) {
             btnOpen.classList.add('d-none');
@@ -63,6 +64,10 @@ class NotificationGatewayApp {
             const roleEl = document.getElementById('authUserRole');
             roleEl.textContent = this.auth.role;
             roleEl.className = this.auth.role === 'Admin' ? 'badge bg-danger me-2' : 'badge bg-info text-dark me-2';
+
+            // Every authenticated user (Admin & Customer) can view & save their own Provider Settings
+            providersTabLi.classList.remove('d-none');
+            this.loadProviderSettings();
 
             if (this.auth.role === 'Admin') {
                 adminTabLi.classList.remove('d-none');
@@ -77,7 +82,9 @@ class NotificationGatewayApp {
             btnOpen.classList.remove('d-none');
             userBadge.classList.add('d-none');
             adminTabLi.classList.add('d-none');
-            if (document.getElementById('tab-admin').classList.contains('active')) {
+            providersTabLi.classList.add('d-none');
+            if (document.getElementById('tab-admin').classList.contains('active') ||
+                document.getElementById('tab-providers').classList.contains('active')) {
                 bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-signalr')).show();
             }
         }
@@ -520,6 +527,132 @@ class NotificationGatewayApp {
             this.loadAdminDashboard();
         });
         document.getElementById('tab-admin').addEventListener('shown.bs.tab', () => this.loadAdminDashboard());
+        document.getElementById('tab-providers').addEventListener('shown.bs.tab', () => this.loadProviderSettings());
+        document.getElementById('btnRefreshProviders').addEventListener('click', () => this.loadProviderSettings());
+
+        document.querySelectorAll('.btn-toggle-secret').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const input = document.getElementById(btn.dataset.target);
+                if (!input) return;
+                const isPwd = input.type === 'password';
+                input.type = isPwd ? 'text' : 'password';
+                btn.innerHTML = isPwd ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+            });
+        });
+
+        document.getElementById('btnSaveSmtp').addEventListener('click', () => this.saveProviderConfig('SMTP', 'Email', {
+            Host: document.getElementById('cfgSmtpHost').value.trim(),
+            Port: parseInt(document.getElementById('cfgSmtpPort').value, 10) || 587,
+            UseSsl: document.getElementById('cfgSmtpUseSsl').checked,
+            FromEmail: document.getElementById('cfgSmtpFromEmail').value.trim(),
+            FromName: document.getElementById('cfgSmtpFromName').value.trim(),
+            Username: document.getElementById('cfgSmtpUsername').value.trim(),
+            Password: document.getElementById('cfgSmtpPassword').value
+        }));
+
+        document.getElementById('btnSaveSms').addEventListener('click', () => this.saveProviderConfig('SMS', 'Sms', {
+            ApiKey: document.getElementById('cfgSmsApiKey').value.trim(),
+            ApiSecret: document.getElementById('cfgSmsApiSecret').value.trim(),
+            SenderId: document.getElementById('cfgSmsSenderId').value.trim() || 'NotifGate'
+        }));
+
+        document.getElementById('btnSaveWhatsApp').addEventListener('click', () => this.saveProviderConfig('WHATSAPP', 'WhatsApp', {
+            IdInstance: document.getElementById('cfgWaIdInstance').value.trim(),
+            ApiToken: document.getElementById('cfgWaApiToken').value.trim()
+        }));
+
+        document.getElementById('btnSaveWebhook').addEventListener('click', () => this.saveProviderConfig('WEBHOOK', 'Webhook', {
+            SecretKey: document.getElementById('cfgWebhookSecret').value.trim()
+        }));
+    }
+
+    async loadProviderSettings() {
+        if (!this.auth?.token) return;
+        try {
+            const resp = await fetch('/api/v1/provider-configurations', { headers: this.getAuthHeaders(false) });
+            if (!resp.ok) return;
+            const list = await resp.json();
+
+            const getProp = (obj, name) => {
+                if (!obj) return '';
+                const key = Object.keys(obj).find(k => k.toLowerCase() === name.toLowerCase());
+                return key ? (obj[key] ?? '') : '';
+            };
+
+            const setStatus = (elId, isReal, isUserCustom) => {
+                const el = document.getElementById(elId);
+                if (!el) return;
+                const scopeLabel = isUserCustom ? 'My Saved Config' : 'Default';
+                el.textContent = `${isReal ? 'Configured' : 'Simulated'} · ${scopeLabel}`;
+                el.className = isUserCustom
+                    ? 'badge bg-primary-subtle text-primary'
+                    : (isReal ? 'badge bg-success-subtle text-success' : 'badge bg-warning-subtle text-warning');
+            };
+
+            const smtpItem = list.find(x => x.channel === 'Email');
+            const smtp = smtpItem?.configuration;
+            if (smtp) {
+                document.getElementById('cfgSmtpHost').value = getProp(smtp, 'Host');
+                document.getElementById('cfgSmtpPort').value = getProp(smtp, 'Port') || 587;
+                document.getElementById('cfgSmtpUseSsl').checked = Boolean(getProp(smtp, 'UseSsl'));
+                document.getElementById('cfgSmtpFromEmail').value = getProp(smtp, 'FromEmail');
+                document.getElementById('cfgSmtpFromName').value = getProp(smtp, 'FromName');
+                document.getElementById('cfgSmtpUsername').value = getProp(smtp, 'Username');
+                document.getElementById('cfgSmtpPassword').value = getProp(smtp, 'Password');
+                const pwd = String(getProp(smtp, 'Password'));
+                setStatus('badgeStatusEmail', Boolean(getProp(smtp, 'Host')) && Boolean(pwd) && !pwd.includes('PASTE_'), Boolean(smtpItem?.isUserCustom));
+            }
+
+            const smsItem = list.find(x => x.channel === 'Sms');
+            const sms = smsItem?.configuration;
+            if (sms) {
+                document.getElementById('cfgSmsApiKey').value = getProp(sms, 'ApiKey');
+                document.getElementById('cfgSmsApiSecret').value = getProp(sms, 'ApiSecret');
+                document.getElementById('cfgSmsSenderId').value = getProp(sms, 'SenderId') || 'NotifGate';
+                setStatus('badgeStatusSms', Boolean(getProp(sms, 'ApiKey')) && Boolean(getProp(sms, 'ApiSecret')), Boolean(smsItem?.isUserCustom));
+            }
+
+            const waItem = list.find(x => x.channel === 'WhatsApp');
+            const wa = waItem?.configuration;
+            if (wa) {
+                document.getElementById('cfgWaIdInstance').value = getProp(wa, 'IdInstance');
+                document.getElementById('cfgWaApiToken').value = getProp(wa, 'ApiToken');
+                setStatus('badgeStatusWhatsApp', Boolean(getProp(wa, 'IdInstance')) && Boolean(getProp(wa, 'ApiToken')), Boolean(waItem?.isUserCustom));
+            }
+
+            const whItem = list.find(x => x.channel === 'Webhook');
+            const wh = whItem?.configuration;
+            if (wh) {
+                document.getElementById('cfgWebhookSecret').value = getProp(wh, 'SecretKey');
+                setStatus('badgeStatusWebhook', Boolean(getProp(wh, 'SecretKey')), Boolean(whItem?.isUserCustom));
+            }
+        } catch (err) {
+            console.warn('Provider settings load error:', err);
+        }
+    }
+
+    async saveProviderConfig(providerCode, channel, configuration) {
+        const toast = document.getElementById('providerSaveToast');
+        const toastText = document.getElementById('providerSaveToastText');
+        try {
+            const resp = await fetch('/api/v1/provider-configurations/upsert', {
+                method: 'PUT',
+                headers: this.getAuthHeaders(true),
+                body: JSON.stringify({ providerCode, channel, configuration, isPrimary: true, priority: 1 })
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.message || 'Save failed');
+
+            toastText.textContent = data.message || `${channel} configuration saved!`;
+            toast.className = 'alert alert-success py-2 small mb-3';
+            toast.classList.remove('d-none');
+            setTimeout(() => toast.classList.add('d-none'), 4000);
+            await this.loadProviderSettings();
+        } catch (err) {
+            toastText.textContent = err.message;
+            toast.className = 'alert alert-danger py-2 small mb-3';
+            toast.classList.remove('d-none');
+        }
     }
 
     async login() {

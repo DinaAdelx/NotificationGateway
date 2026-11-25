@@ -207,3 +207,32 @@ GET {{Host}}/api/v1/admin/dashboard?channel=Email
 X-Tenant-Id: {{TenantId}}
 X-Application-Id: {{AppId}}
 Authorization: Bearer {{adminLogin.response.body.$.token}}
+
+###
+
+### 12. Get All Provider Configurations (Admin)
+GET {{Host}}/api/v1/provider-configurations
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+Authorization: Bearer {{adminLogin.response.body.$.token}}
+
+###
+
+### 13. Upsert SMS / WhatsApp / Email Provider Settings (Admin)
+PUT {{Host}}/api/v1/provider-configurations/upsert
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+Authorization: Bearer {{adminLogin.response.body.$.token}}
+
+{
+  "providerCode": "SMS",
+  "channel": "Sms",
+  "isPrimary": true,
+  "priority": 1,
+  "configuration": {
+    "ApiKey": "ded500b6",
+    "ApiSecret": "YDuxkURrQ57fZSop",
+    "SenderId": "NotifGate"
+  }
+}

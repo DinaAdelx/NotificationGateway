@@ -179,6 +179,162 @@
                         </div>
 
                     </div>
+                    <!-- TAB 5: Provider Settings (Admin Only) -->
+                    <div class="tab-pane fade" id="pane-providers" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h6 class="mb-0 fw-bold"><i class="bi bi-sliders text-primary me-2"></i>Channel Provider Settings</h6>
+                                <small class="text-muted">Configure live credentials per channel. Saved settings override <code>appsettings.json</code> immediately.</small>
+                            </div>
+                            <button id="btnRefreshProviders" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-arrow-repeat me-1"></i> Reload
+                            </button>
+                        </div>
+
+                        <div id="providerSaveToast" class="alert alert-success py-2 small d-none mb-3" role="alert">
+                            <i class="bi bi-check-circle-fill me-1"></i> <span id="providerSaveToastText">Saved!</span>
+                        </div>
+
+                        <div class="row g-3">
+                            <!-- Email (SMTP) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-email me-2">Email</span> SMTP (Gmail / Custom)</span>
+                                        <span id="badgeStatusEmail" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-8">
+                                                <label class="form-label small fw-semibold mb-1">Host</label>
+                                                <input id="cfgSmtpHost" type="text" class="form-control form-control-sm font-monospace" placeholder="smtp.gmail.com">
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold mb-1">Port</label>
+                                                <input id="cfgSmtpPort" type="number" class="form-control form-control-sm font-monospace" value="587">
+                                            </div>
+                                        </div>
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6">
+                                                <label class="form-label small fw-semibold mb-1">From Email</label>
+                                                <input id="cfgSmtpFromEmail" type="email" class="form-control form-control-sm">
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="form-label small fw-semibold mb-1">From Name</label>
+                                                <input id="cfgSmtpFromName" type="text" class="form-control form-control-sm">
+                                            </div>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">Username</label>
+                                            <input id="cfgSmtpUsername" type="text" class="form-control form-control-sm font-monospace">
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">Password / App Password</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgSmtpPassword" type="password" class="form-control font-monospace">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgSmtpPassword"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mt-3">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input" type="checkbox" id="cfgSmtpUseSsl">
+                                                <label class="form-check-label small" for="cfgSmtpUseSsl">Use Direct SSL (465)</label>
+                                            </div>
+                                            <button id="btnSaveSmtp" class="btn btn-primary btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save Email
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SMS (Vonage) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-sms me-2">SMS</span> Vonage REST API</span>
+                                        <span id="badgeStatusSms" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column">
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">ApiKey</label>
+                                            <input id="cfgSmsApiKey" type="text" class="form-control form-control-sm font-monospace" placeholder="ded500b6">
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">ApiSecret</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgSmsApiSecret" type="password" class="form-control font-monospace">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgSmsApiSecret"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold mb-1">SenderId (max 11 chars)</label>
+                                            <input id="cfgSmsSenderId" type="text" class="form-control form-control-sm font-monospace" placeholder="NotifGate">
+                                        </div>
+                                        <div class="mt-auto text-end">
+                                            <button id="btnSaveSms" class="btn btn-primary btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save SMS
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- WhatsApp (Green API) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-whatsapp me-2">WhatsApp</span> Green API</span>
+                                        <span id="badgeStatusWhatsApp" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column">
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">IdInstance</label>
+                                            <input id="cfgWaIdInstance" type="text" class="form-control form-control-sm font-monospace" placeholder="710722813665">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold mb-1">ApiToken</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgWaApiToken" type="password" class="form-control font-monospace">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgWaApiToken"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="mt-auto text-end">
+                                            <button id="btnSaveWhatsApp" class="btn btn-success btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save WhatsApp
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Webhook (HMAC-SHA256) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-webhook me-2">Webhook</span> HMAC-SHA256 Signing</span>
+                                        <span id="badgeStatusWebhook" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column">
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold mb-1">Signing SecretKey</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgWebhookSecret" type="password" class="form-control font-monospace" placeholder="whsec_...">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgWebhookSecret"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                            <div class="form-text small">Used to compute <code>X-Hub-Signature-256</code> on outbound webhook POSTs.</div>
+                                        </div>
+                                        <div class="mt-auto text-end">
+                                            <button id="btnSaveWebhook" class="btn btn-info text-white btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save Webhook
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
             </div>
@@ -206,6 +362,11 @@
                     <li class="nav-item d-none" id="tab-admin-li" role="presentation">
                         <button class="nav-link fw-semibold" id="tab-admin" data-bs-toggle="pill" data-bs-target="#pane-admin" type="button">
                             <i class="bi bi-shield-lock-fill text-danger me-1"></i> Admin Dashboard
+                        </button>
+                    </li>
+                    <li class="nav-item d-none" id="tab-providers-li" role="presentation">
+                        <button class="nav-link fw-semibold" id="tab-providers" data-bs-toggle="pill" data-bs-target="#pane-providers" type="button">
+                            <i class="bi bi-sliders text-primary me-1"></i> Provider Settings
                         </button>
                     </li>
                 </ul>
@@ -439,6 +600,162 @@
                                     </thead>
                                     <tbody id="adminDeliveriesBody"></tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 5: Provider Settings (Admin Only) -->
+                    <div class="tab-pane fade" id="pane-providers" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h6 class="mb-0 fw-bold"><i class="bi bi-sliders text-primary me-2"></i>Channel Provider Settings</h6>
+                                <small class="text-muted">Configure live credentials per channel. Saved settings override <code>appsettings.json</code> immediately.</small>
+                            </div>
+                            <button id="btnRefreshProviders" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-arrow-repeat me-1"></i> Reload
+                            </button>
+                        </div>
+
+                        <div id="providerSaveToast" class="alert alert-success py-2 small d-none mb-3" role="alert">
+                            <i class="bi bi-check-circle-fill me-1"></i> <span id="providerSaveToastText">Saved!</span>
+                        </div>
+
+                        <div class="row g-3">
+                            <!-- Email (SMTP) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-email me-2">Email</span> SMTP (Gmail / Custom)</span>
+                                        <span id="badgeStatusEmail" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-8">
+                                                <label class="form-label small fw-semibold mb-1">Host</label>
+                                                <input id="cfgSmtpHost" type="text" class="form-control form-control-sm font-monospace" placeholder="smtp.gmail.com">
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold mb-1">Port</label>
+                                                <input id="cfgSmtpPort" type="number" class="form-control form-control-sm font-monospace" value="587">
+                                            </div>
+                                        </div>
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6">
+                                                <label class="form-label small fw-semibold mb-1">From Email</label>
+                                                <input id="cfgSmtpFromEmail" type="email" class="form-control form-control-sm">
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="form-label small fw-semibold mb-1">From Name</label>
+                                                <input id="cfgSmtpFromName" type="text" class="form-control form-control-sm">
+                                            </div>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">Username</label>
+                                            <input id="cfgSmtpUsername" type="text" class="form-control form-control-sm font-monospace">
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">Password / App Password</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgSmtpPassword" type="password" class="form-control font-monospace">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgSmtpPassword"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mt-3">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input" type="checkbox" id="cfgSmtpUseSsl">
+                                                <label class="form-check-label small" for="cfgSmtpUseSsl">Use Direct SSL (465)</label>
+                                            </div>
+                                            <button id="btnSaveSmtp" class="btn btn-primary btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save Email
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SMS (Vonage) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-sms me-2">SMS</span> Vonage REST API</span>
+                                        <span id="badgeStatusSms" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column">
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">ApiKey</label>
+                                            <input id="cfgSmsApiKey" type="text" class="form-control form-control-sm font-monospace" placeholder="ded500b6">
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">ApiSecret</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgSmsApiSecret" type="password" class="form-control font-monospace">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgSmsApiSecret"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold mb-1">SenderId (max 11 chars)</label>
+                                            <input id="cfgSmsSenderId" type="text" class="form-control form-control-sm font-monospace" placeholder="NotifGate">
+                                        </div>
+                                        <div class="mt-auto text-end">
+                                            <button id="btnSaveSms" class="btn btn-primary btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save SMS
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- WhatsApp (Green API) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-whatsapp me-2">WhatsApp</span> Green API</span>
+                                        <span id="badgeStatusWhatsApp" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column">
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-semibold mb-1">IdInstance</label>
+                                            <input id="cfgWaIdInstance" type="text" class="form-control form-control-sm font-monospace" placeholder="710722813665">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold mb-1">ApiToken</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgWaApiToken" type="password" class="form-control font-monospace">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgWaApiToken"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="mt-auto text-end">
+                                            <button id="btnSaveWhatsApp" class="btn btn-success btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save WhatsApp
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Webhook (HMAC-SHA256) Card -->
+                            <div class="col-lg-6">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                        <span class="fw-bold"><span class="badge badge-webhook me-2">Webhook</span> HMAC-SHA256 Signing</span>
+                                        <span id="badgeStatusWebhook" class="badge bg-secondary-subtle text-secondary">Loading...</span>
+                                    </div>
+                                    <div class="card-body d-flex flex-column">
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold mb-1">Signing SecretKey</label>
+                                            <div class="input-group input-group-sm">
+                                                <input id="cfgWebhookSecret" type="password" class="form-control font-monospace" placeholder="whsec_...">
+                                                <button class="btn btn-outline-secondary btn-toggle-secret" type="button" data-target="cfgWebhookSecret"><i class="bi bi-eye"></i></button>
+                                            </div>
+                                            <div class="form-text small">Used to compute <code>X-Hub-Signature-256</code> on outbound webhook POSTs.</div>
+                                        </div>
+                                        <div class="mt-auto text-end">
+                                            <button id="btnSaveWebhook" class="btn btn-info text-white btn-sm fw-semibold">
+                                                <i class="bi bi-save me-1"></i> Save Webhook
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

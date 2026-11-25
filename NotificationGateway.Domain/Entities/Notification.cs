@@ -7,6 +7,7 @@ public class Notification
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public Guid ApplicationId { get; private set; }
+    public Guid? UserId { get; private set; }
     public Guid NotificationTypeDefinitionId { get; private set; }
     public string NotificationTypeCode { get; private set; } = string.Empty;
     public int SchemaVersion { get; private set; }
@@ -29,13 +30,14 @@ public class Notification
         Guid tenantId, Guid applicationId, Guid notificationTypeId, string typeCode,
         int schemaVersion, string payloadJson, NotificationPriority priority,
         string? idempotencyKey = null, string? correlationId = null,
-        string? metadataJson = null, DateTime? scheduledAt = null)
+        string? metadataJson = null, DateTime? scheduledAt = null, Guid? userId = null)
     {
         return new Notification
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ApplicationId = applicationId,
+            UserId = userId,
             NotificationTypeDefinitionId = notificationTypeId,
             NotificationTypeCode = typeCode,
             SchemaVersion = schemaVersion,

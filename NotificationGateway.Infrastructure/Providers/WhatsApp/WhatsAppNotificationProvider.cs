@@ -101,22 +101,29 @@ public class WhatsAppNotificationProvider(
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
+    private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
+
     private GreenApiConfig? ResolveConfig(string? dbConfigJson)
     {
-        // Priority 1: appsettings.json  "WhatsApp" section
+        // Priority 1: Per-tenant DB ConfigurationJson (editable via UI/API)
+        if (!string.IsNullOrWhiteSpace(dbConfigJson) && dbConfigJson != "{}")
+        {
+            try
+            {
+                var dbCfg = JsonSerializer.Deserialize<GreenApiConfig>(dbConfigJson, _jsonOpts);
+                if (dbCfg is not null && !string.IsNullOrWhiteSpace(dbCfg.IdInstance) && !string.IsNullOrWhiteSpace(dbCfg.ApiToken))
+                    return dbCfg;
+            }
+            catch { /* fall through */ }
+        }
+
+        // Priority 2: appsettings.json "WhatsApp" section
         var appSettingsIdInstance = configuration["WhatsApp:IdInstance"];
         var appSettingsApiToken   = configuration["WhatsApp:ApiToken"];
 
         if (!string.IsNullOrWhiteSpace(appSettingsIdInstance) && !string.IsNullOrWhiteSpace(appSettingsApiToken))
         {
             return new GreenApiConfig(appSettingsIdInstance, appSettingsApiToken);
-        }
-
-        // Priority 2: DB ConfigurationJson
-        if (!string.IsNullOrWhiteSpace(dbConfigJson))
-        {
-            try { return JsonSerializer.Deserialize<GreenApiConfig>(dbConfigJson); }
-            catch { /* fall through */ }
         }
 
         return null;

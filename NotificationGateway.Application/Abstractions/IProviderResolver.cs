@@ -11,7 +11,8 @@ public interface IProviderResolver
         NotificationChannel channel,
         Guid? notificationTypeId,
         NotificationPriority priority,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        Guid? userId = null);
 
     Task<IReadOnlyList<TenantProviderConfiguration>> ResolveFallbacksAsync(
         Guid tenantId, Guid applicationId,

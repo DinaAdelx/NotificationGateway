@@ -33,10 +33,10 @@ public class DeliveryDispatcher(
         var notifType = await typeRepo.GetByIdAsync(tenantId, notification.NotificationTypeDefinitionId, ct);
         if (notifType is null) return;
 
-        // Resolve provider
+        // Resolve provider (checks per-user saved settings first, then tenant defaults)
         var providerConfig = await providerResolver.ResolveAsync(
             tenantId, notification.ApplicationId, delivery.Channel,
-            notification.NotificationTypeDefinitionId, notification.Priority, ct);
+            notification.NotificationTypeDefinitionId, notification.Priority, ct, notification.UserId);
 
         if (providerConfig is null)
         {

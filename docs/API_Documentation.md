@@ -58,9 +58,10 @@
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/v1/provider-configurations?channel={ch}` | **Admin** | List enabled provider configs for a channel. |
+| `GET` | `/api/v1/provider-configurations?channel={ch}` | **Admin** | List enabled provider configs (`channel` optional — omit to return all channels with `appsettings.json` fallbacks). |
 | `GET` | `/api/v1/provider-configurations/{id}` | **Admin** | Get a provider configuration by ID. |
 | `POST` | `/api/v1/provider-configurations` | **Admin** | Create a provider configuration. |
+| `PUT` | `/api/v1/provider-configurations/upsert` | **Admin** | Create or update a channel's provider settings (`Email`, `Sms`, `WhatsApp`, `Webhook`) in one call. |
 | `DELETE` | `/api/v1/provider-configurations/{id}` | **Admin** | Delete a provider configuration. |
 
 ---

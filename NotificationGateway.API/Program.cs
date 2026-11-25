@@ -213,6 +213,13 @@ using (var scope = app.Services.CreateScope())
             db.Database.Migrate();
             app.Logger.LogInformation("SQL Server database and all entity tables migrated/created successfully.");
 
+            // Ensure per-user UserId columns exist for dynamic per-user provider settings & notifications
+            db.Database.ExecuteSqlRaw(@"
+                IF COL_LENGTH('TenantProviderConfigurations', 'UserId') IS NULL
+                    ALTER TABLE TenantProviderConfigurations ADD UserId UNIQUEIDENTIFIER NULL;
+                IF COL_LENGTH('Notifications', 'UserId') IS NULL
+                    ALTER TABLE Notifications ADD UserId UNIQUEIDENTIFIER NULL;");
+
             // Seed default test tenant and application client if they don't exist
             var defaultTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
             var defaultAppId = Guid.Parse("22222222-2222-2222-2222-222222222222");

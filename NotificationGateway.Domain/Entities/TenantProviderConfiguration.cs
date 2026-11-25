@@ -7,6 +7,7 @@ public class TenantProviderConfiguration
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public Guid ApplicationId { get; private set; }
+    public Guid? UserId { get; private set; }
     public string ProviderCode { get; private set; } = string.Empty;
     public NotificationChannel Channel { get; private set; }
     public bool IsEnabled { get; private set; }
@@ -24,13 +25,14 @@ public class TenantProviderConfiguration
     public static TenantProviderConfiguration Create(
         Guid tenantId, Guid applicationId, string providerCode,
         NotificationChannel channel, string configJson,
-        string? encryptedCredentials = null, bool isPrimary = false, int priority = 0)
+        string? encryptedCredentials = null, bool isPrimary = false, int priority = 0, Guid? userId = null)
     {
         return new TenantProviderConfiguration
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ApplicationId = applicationId,
+            UserId = userId,
             ProviderCode = providerCode,
             Channel = channel,
             IsEnabled = true,
@@ -45,4 +47,13 @@ public class TenantProviderConfiguration
     public void Disable()  { IsEnabled = false; UpdatedAt = DateTime.UtcNow; }
     public void Enable()   { IsEnabled = true;  UpdatedAt = DateTime.UtcNow; }
     public void UpdateCredentials(string encrypted) { EncryptedCredentials = encrypted; UpdatedAt = DateTime.UtcNow; }
+
+    public void UpdateConfiguration(string configJson, bool isPrimary = true, int priority = 1)
+    {
+        ConfigurationJson = configJson;
+        IsPrimary = isPrimary;
+        Priority = priority;
+        IsEnabled = true;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

@@ -24,10 +24,12 @@ public class SmtpEmailProvider(
     {
         try
         {
-            // 1. Prefer appsettings.json "Smtp" section (tenant main account)
-            //    Fall back to DB provider config only if appsettings key is absent.
-            var smtpConfig = BuildConfigFromAppSettings()
-                             ?? ParseDbConfig(configuration_.ConfigurationJson);
+            // 1. Prefer per-tenant DB config (updated via UI/API) if it has real credentials,
+            //    otherwise fall back to appsettings.json "Smtp" section.
+            var dbConfig = ParseDbConfig(configuration_.ConfigurationJson);
+            var smtpConfig = (dbConfig is not null && !IsSimulated(dbConfig))
+                ? dbConfig
+                : BuildConfigFromAppSettings() ?? dbConfig;
 
             if (smtpConfig is null)
             {
@@ -102,10 +104,12 @@ public class SmtpEmailProvider(
             Password:  configuration["Smtp:Password"] ?? "");
     }
 
+    private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
+
     private static SmtpConfig? ParseDbConfig(string? json)
     {
         if (string.IsNullOrWhiteSpace(json) || json == "{}") return null;
-        try { return JsonSerializer.Deserialize<SmtpConfig>(json); }
+        try { return JsonSerializer.Deserialize<SmtpConfig>(json, _jsonOpts); }
         catch { return null; }
     }
 

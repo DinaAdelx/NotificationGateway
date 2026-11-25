@@ -37,6 +37,8 @@ public class NotificationsController(
         if (context.TenantId == Guid.Empty || context.ApplicationId == Guid.Empty)
             return Unauthorized(new { message = "Valid tenant and application context are required." });
 
+        Guid? userId = Guid.TryParse(context.ClientId, out var parsedUid) ? parsedUid : null;
+
         var command = new SubmitNotificationCommand(
             context.TenantId,
             context.ApplicationId,
@@ -49,7 +51,8 @@ public class NotificationsController(
             idempotencyKey,
             request.CorrelationId,
             request.Metadata,
-            request.ScheduledAt);
+            request.ScheduledAt,
+            userId);
 
         var result = await mediator.Send(command, ct);
         if (result.IsDuplicate)
