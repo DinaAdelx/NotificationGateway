@@ -1,14 +1,27 @@
 using NotificationGateway.Application.Abstractions;
 using NotificationGateway.Domain.Entities;
 using NotificationGateway.Domain.Enums;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text;
 
 namespace NotificationGateway.Infrastructure.Providers.WhatsApp;
 
-public class WhatsAppNotificationProvider(HttpClient httpClient, ILogger<WhatsAppNotificationProvider> logger) : INotificationProvider
+/// <summary>
+/// WhatsApp provider using Green API (https://green-api.com) — free developer tier.
+/// Falls back to simulation mode if no credentials are configured.
+/// Green API endpoint: POST https://api.green-api.com/waInstance{IdInstance}/sendMessage/{ApiToken}
+/// Phone format sent as chatId: "201234567890@c.us"  (country code + local number, no +)
+/// </summary>
+public class WhatsAppNotificationProvider(
+    HttpClient httpClient,
+    IConfiguration configuration,
+    ILogger<WhatsAppNotificationProvider> logger) : INotificationProvider
 {
+    // ── Green API base URL (can be overridden per-tenant via ConfigurationJson)
+    private const string GreenApiBase = "https://api.green-api.com";
+
     public string ProviderCode => "WHATSAPP";
     public NotificationChannel Channel => NotificationChannel.WhatsApp;
     public ProviderCapabilities Capabilities => new(SupportsDeliveryReceipt: true, SupportsScheduling: false, SupportsHtml: false);
@@ -20,49 +33,104 @@ public class WhatsAppNotificationProvider(HttpClient httpClient, ILogger<WhatsAp
     {
         try
         {
-            var config = !string.IsNullOrWhiteSpace(configuration.ConfigurationJson)
-                ? JsonSerializer.Deserialize<WhatsAppConfig>(configuration.ConfigurationJson)
-                : null;
+            // 1. Resolve config: appsettings.json first, then DB ConfigurationJson
+            var cfg = ResolveConfig(configuration.ConfigurationJson);
 
-            // If real Meta Cloud API or Twilio credentials provided
-            if (config != null && !string.IsNullOrWhiteSpace(config.ApiUrl) && !string.IsNullOrWhiteSpace(config.ApiKey))
+            // 2. Simulation mode — no real credentials
+            if (cfg == null || string.IsNullOrWhiteSpace(cfg.IdInstance) || string.IsNullOrWhiteSpace(cfg.ApiToken))
             {
-                var payload = new
-                {
-                    messaging_product = "whatsapp",
-                    recipient_type = "individual",
-                    to = notification.RecipientAddress,
-                    type = "text",
-                    text = new { preview_url = false, body = notification.Body }
-                };
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, config.ApiUrl);
-                request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
-                request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-                var response = await httpClient.SendAsync(request, cancellationToken);
-                var respBody = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    logger.LogInformation("WhatsApp message delivered to {Recipient}", notification.RecipientAddress);
-                    return new ProviderSendResult(true, $"wamid.{Guid.NewGuid():N}", "sent", false, FailureCategory.None, null, null);
-                }
-
-                logger.LogWarning("WhatsApp API returned error {StatusCode}: {Error}", response.StatusCode, respBody);
-                return new ProviderSendResult(false, null, "failed", true, FailureCategory.ProviderUnavailable, "WHATSAPP_API_ERROR", respBody);
+                logger.LogInformation("[WhatsApp Simulated] To: {Recipient} | Body: {Body}",
+                    notification.RecipientAddress, notification.Body);
+                return new ProviderSendResult(true, $"wamid.sim_{Guid.NewGuid():N}", "simulated",
+                    false, FailureCategory.None, null, null);
             }
 
-            // High-throughput simulated / direct test dispatch
-            logger.LogInformation("[WhatsApp Test Delivery] To: {Recipient} | Text: {Text}", notification.RecipientAddress, notification.Body);
-            return new ProviderSendResult(true, $"wamid.sim_{Guid.NewGuid():N}", "delivered", false, FailureCategory.None, null, null);
+            // 3. Build Green API endpoint
+            var url = $"{GreenApiBase}/waInstance{cfg.IdInstance}/sendMessage/{cfg.ApiToken}";
+
+            // 4. Format phone as Green API chatId: strip +, append @c.us
+            var chatId = FormatChatId(notification.RecipientAddress);
+
+            var payload = new
+            {
+                chatId,
+                message = notification.Body
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+
+            logger.LogInformation("Sending WhatsApp via Green API to {ChatId}", chatId);
+
+            var response = await httpClient.SendAsync(request, cancellationToken);
+            var respBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Green API returns: { "idMessage": "XXXXXXXX" }
+                string? messageId = null;
+                try
+                {
+                    var respDoc = JsonDocument.Parse(respBody);
+                    messageId = respDoc.RootElement.TryGetProperty("idMessage", out var idProp)
+                        ? idProp.GetString() : null;
+                }
+                catch { /* ignore parse errors */ }
+
+                logger.LogInformation("WhatsApp message sent via Green API. MessageId={MsgId}, Recipient={Recipient}",
+                    messageId, notification.RecipientAddress);
+
+                return new ProviderSendResult(true, messageId ?? $"green_{Guid.NewGuid():N}", "sent",
+                    false, FailureCategory.None, null, null);
+            }
+
+            logger.LogWarning("Green API error {StatusCode}: {Error}", response.StatusCode, respBody);
+            return new ProviderSendResult(false, null, "failed", true,
+                FailureCategory.ProviderUnavailable, "GREEN_API_ERROR", $"{response.StatusCode}: {respBody}");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "WhatsApp dispatch failed for delivery {DeliveryId}", notification.DeliveryId);
-            return new ProviderSendResult(false, null, "failed", true, FailureCategory.ProviderUnavailable, "WHATSAPP_ERROR", ex.Message);
+            return new ProviderSendResult(false, null, "failed", true,
+                FailureCategory.ProviderUnavailable, "WHATSAPP_ERROR", ex.Message);
         }
     }
 
-    public record WhatsAppConfig(string? ApiUrl, string? ApiKey, string? PhoneNumberId);
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private GreenApiConfig? ResolveConfig(string? dbConfigJson)
+    {
+        // Priority 1: appsettings.json  "WhatsApp" section
+        var appSettingsIdInstance = configuration["WhatsApp:IdInstance"];
+        var appSettingsApiToken   = configuration["WhatsApp:ApiToken"];
+
+        if (!string.IsNullOrWhiteSpace(appSettingsIdInstance) && !string.IsNullOrWhiteSpace(appSettingsApiToken))
+        {
+            return new GreenApiConfig(appSettingsIdInstance, appSettingsApiToken);
+        }
+
+        // Priority 2: DB ConfigurationJson
+        if (!string.IsNullOrWhiteSpace(dbConfigJson))
+        {
+            try { return JsonSerializer.Deserialize<GreenApiConfig>(dbConfigJson); }
+            catch { /* fall through */ }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Green API requires chatId format: "201234567890@c.us"
+    /// Strips leading +, spaces, dashes. If number has no country code prefix we leave it as-is.
+    /// </summary>
+    private static string FormatChatId(string phone)
+    {
+        var digits = phone.TrimStart('+').Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
+        return $"{digits}@c.us";
+    }
+
+    public record GreenApiConfig(string? IdInstance, string? ApiToken);
 }

@@ -124,7 +124,8 @@ public class MultiProviderTests
     public async Task SmsProvider_SimulatedSend_ReturnsSuccessAndId()
     {
         var loggerMock = new Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationGateway.Infrastructure.Providers.Sms.SmsNotificationProvider>();
-        var provider = new NotificationGateway.Infrastructure.Providers.Sms.SmsNotificationProvider(new HttpClient(), loggerMock);
+        var emptyConfig = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var provider = new NotificationGateway.Infrastructure.Providers.Sms.SmsNotificationProvider(new HttpClient(), emptyConfig, loggerMock);
         var config = NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
             Guid.NewGuid(), Guid.NewGuid(), "SMS", NotificationGateway.Domain.Enums.NotificationChannel.Sms, "{}");
 
@@ -143,7 +144,9 @@ public class MultiProviderTests
     public async Task WhatsAppProvider_SimulatedSend_ReturnsSuccessAndWamid()
     {
         var loggerMock = new Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationGateway.Infrastructure.Providers.WhatsApp.WhatsAppNotificationProvider>();
-        var provider = new NotificationGateway.Infrastructure.Providers.WhatsApp.WhatsAppNotificationProvider(new HttpClient(), loggerMock);
+        // Pass a no-op IConfiguration so the provider falls into simulation mode (no real credentials)
+        var emptyConfig = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var provider = new NotificationGateway.Infrastructure.Providers.WhatsApp.WhatsAppNotificationProvider(new HttpClient(), emptyConfig, loggerMock);
         var config = NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
             Guid.NewGuid(), Guid.NewGuid(), "WHATSAPP", NotificationGateway.Domain.Enums.NotificationChannel.WhatsApp, "{}");
 
@@ -156,5 +159,29 @@ public class MultiProviderTests
 
         result.IsSuccess.Should().BeTrue();
         result.ProviderMessageId.Should().StartWith("wamid.");
+    }
+
+    [Fact]
+    public void HandlebarsRenderer_WebhookJsonTemplate_RendersCleanJson()
+    {
+        var repo = new InMemoryTemplateRepoStub();
+        var renderer = new NotificationGateway.Infrastructure.Services.HandlebarsTemplateRenderer(repo);
+
+        var webhookContent = "{\"event\":\"ORDER_SHIPPED\",\"orderId\":\"{{orderId}}\",\"customerName\":\"{{customerName}}\" }";
+        var payload = "{\"orderId\":\"ORD-99\",\"customerName\":\"Dina\"}";
+
+        var rendered = renderer.Preview(webhookContent, "ORDER_SHIPPED", payload);
+
+        rendered.Body.Should().Contain("\"orderId\":\"ORD-99\"");
+        rendered.Body.Should().Contain("\"customerName\":\"Dina\"");
+    }
+
+    private class InMemoryTemplateRepoStub : NotificationGateway.Domain.Interfaces.ITemplateRepository
+    {
+        public Task<NotificationGateway.Domain.Entities.NotificationTemplate?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken ct = default) => Task.FromResult<NotificationGateway.Domain.Entities.NotificationTemplate?>(null);
+        public Task<NotificationGateway.Domain.Entities.NotificationTemplate?> GetActiveAsync(Guid tenantId, Guid applicationId, Guid notificationTypeId, NotificationGateway.Domain.Enums.NotificationChannel channel, string language, CancellationToken ct = default) => Task.FromResult<NotificationGateway.Domain.Entities.NotificationTemplate?>(null);
+        public Task<IReadOnlyList<NotificationGateway.Domain.Entities.NotificationTemplate>> GetAllAsync(Guid tenantId, Guid applicationId, Guid? userId = null, Guid? notificationTypeId = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<NotificationGateway.Domain.Entities.NotificationTemplate>>(Array.Empty<NotificationGateway.Domain.Entities.NotificationTemplate>());
+        public Task AddAsync(NotificationGateway.Domain.Entities.NotificationTemplate template, CancellationToken ct = default) => Task.CompletedTask;
+        public Task UpdateAsync(NotificationGateway.Domain.Entities.NotificationTemplate template, CancellationToken ct = default) => Task.CompletedTask;
     }
 }

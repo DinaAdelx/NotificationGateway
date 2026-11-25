@@ -99,8 +99,11 @@ Define a new dynamic notification type (`ORDER_SHIPPED`) with a required payload
   "displayName": "Order Shipped Notification",
   "description": "Triggered when an order package is dispatched to the carrier",
   "allowedChannels": [
-    0,
-    4
+    "Email",
+    "Sms",
+    "WhatsApp",
+    "SignalR",
+    "Webhook"
   ],
   "defaultLanguage": "en",
   "payloadSchema": {
@@ -121,7 +124,7 @@ Define a new dynamic notification type (`ORDER_SHIPPED`) with a required payload
   }
 }
 ```
-*(Channel Enum: `0` = Email, `1` = Sms, `2` = WhatsApp, `3` = Push, `4` = InApp, `5` = SignalR)*
+*(Channel Enum accepts string names or integers: `Email`=0, `Sms`=1, `WhatsApp`=2, `Push`=3, `InApp`=4, `SignalR`=5, `Voice`=6, `Webhook`=7)*
 
 - **Expected Response (`201 Created`)**:
 ```json
@@ -163,19 +166,24 @@ Test payload validation before submitting notifications to make sure the schema 
 
 ---
 
-## Step 5: Create a Template Associated with the User & Type
+## Step 5: Create Channel-Specific Templates (One per Channel)
 
-Create a channel-specific template associated with both your **`userId`** and the **`notificationTypeDefinitionId`**.
+A single `NotificationTypeDefinition` (such as `ORDER_SHIPPED`) can have **multiple templates — one for each channel**:
+- **Email (`"channel": "Email"`)**: Rich HTML (`content.content`) + `subject`
+- **SMS (`"channel": "Sms"`)**: Short plain text (`content.message`), no HTML
+- **WhatsApp (`"channel": "WhatsApp"`)**: WhatsApp-formatted text (`*bold*`, `\n`)
+- **SignalR (`"channel": "SignalR"`)**: Concise toast message + `subject`
+- **Webhook (`"channel": "Webhook"`)**: Structured JSON payload
 
 - **Method**: `POST`
 - **URL**: `/api/v1/templates`
-- **Request Body**:
-> ⚠️ **Important**: Replace `"3fa85f64-5717-4562-b3fc-2c963f66afa6"` with your actual `TYPE_ID` from Step 3, and replace `"ee259c97-fcb9-4b1d-8175-13aeaffbffe3"` with your actual `USER_ID` from Step 1. Ensure there are no extra letters or spaces!
+- **Request Body (Email example — repeat with `"channel": "Sms"`, `"WhatsApp"`, `"SignalR"`, `"Webhook"` for each channel)**:
+> ⚠️ **Important**: Replace `"3fa85f64-5717-4562-b3fc-2c963f66afa6"` with your actual `TYPE_ID` from Step 3, and replace `"ee259c97-fcb9-4b1d-8175-13aeaffbffe3"` with your actual `USER_ID` from Step 1.
 ```json
 {
   "notificationTypeDefinitionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "userId": "ee259c97-fcb9-4b1d-8175-13aeaffbffe3",
-  "channel": 0,
+  "channel": "Email",
   "language": "en",
   "subject": "Great news, {{customerName}}! Your order {{orderId}} is on the way",
   "content": {
@@ -187,6 +195,20 @@ Create a channel-specific template associated with both your **`userId`** and th
     "carrier",
     "trackingUrl"
   ]
+}
+```
+
+Example **SMS** body (`"channel": "Sms"`):
+```json
+{
+  "notificationTypeDefinitionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "channel": "Sms",
+  "language": "en",
+  "subject": null,
+  "content": {
+    "message": "Hi {{customerName}}, your order {{orderId}} shipped via {{carrier}}. Track: {{trackingUrl}}"
+  },
+  "variables": ["customerName", "orderId", "carrier", "trackingUrl"]
 }
 ```
 
@@ -268,19 +290,24 @@ Submit an actual notification request using the type code, payload, recipient, a
   "type": "ORDER_SHIPPED",
   "recipient": {
     "externalUserId": "cust-500",
-    "email": "customer@example.com",
-    "phone": "+1234567890"
+    "email": "dina.adel.sobhi@gmail.com",
+    "phone": "+201000000000",
+    "webhookUrl": "http://localhost:5022/api/webhooks/receive-test"
   },
   "channels": [
-    0
+    "Email",
+    "Sms",
+    "WhatsApp",
+    "SignalR",
+    "Webhook"
   ],
   "language": "en",
-  "priority": 1,
+  "priority": "Normal",
   "payload": {
     "orderId": "ORD-98765",
-    "customerName": "Sarah",
-    "carrier": "FedEx",
-    "trackingUrl": "https://fedex.com/track/ORD-98765"
+    "customerName": "Dina",
+    "carrier": "Aramex",
+    "trackingUrl": "https://aramex.com/track/ORD-98765"
   },
   "correlationId": "corr-checkout-abc-123"
 }

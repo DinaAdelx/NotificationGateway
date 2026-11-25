@@ -32,6 +32,7 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSignalR();
@@ -132,14 +133,29 @@ builder.Services.AddSingleton<ICredentialEncryptor>(new AesCredentialEncryptor(
 
 // HTTP Client for providers & webhooks
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<SmsNotificationProvider>();
+builder.Services.AddHttpClient<WebhookNotificationProvider>();
+builder.Services.AddHttpClient<WhatsAppNotificationProvider>();
 
 // Providers & Resolver
 builder.Services.AddScoped<INotificationProvider, InAppProvider>();
 builder.Services.AddScoped<INotificationProvider, SmtpEmailProvider>();
 builder.Services.AddScoped<INotificationProvider, SignalRNotificationProvider>();
-builder.Services.AddScoped<INotificationProvider, SmsNotificationProvider>();
-builder.Services.AddScoped<INotificationProvider, WhatsAppNotificationProvider>();
-builder.Services.AddScoped<INotificationProvider, WebhookNotificationProvider>();
+// SMS, WhatsApp, Webhook use typed HttpClient — register via factory so DI injects the typed client
+builder.Services.AddScoped<INotificationProvider>(sp =>
+    new SmsNotificationProvider(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(SmsNotificationProvider)),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<SmsNotificationProvider>>()));
+builder.Services.AddScoped<INotificationProvider>(sp =>
+    new WhatsAppNotificationProvider(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(WhatsAppNotificationProvider)),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<WhatsAppNotificationProvider>>()));
+builder.Services.AddScoped<INotificationProvider>(sp =>
+    new WebhookNotificationProvider(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(WebhookNotificationProvider)),
+        sp.GetRequiredService<ILogger<WebhookNotificationProvider>>()));
 builder.Services.AddScoped<ProviderResolver>();
 builder.Services.AddScoped<IProviderResolver>(sp => sp.GetRequiredService<ProviderResolver>());
 
@@ -223,11 +239,30 @@ using (var scope = app.Services.CreateScope())
             // Seed default provider configurations for Email, SMS, WhatsApp, SignalR, Webhook
             if (!db.TenantProviderConfigurations.Any(c => c.TenantId == defaultTenantId))
             {
+                // Build real Gmail SMTP config from appsettings.json
+                var smtpHost = builder.Configuration["Smtp:Host"] ?? "smtp.gmail.com";
+                var smtpPort = builder.Configuration["Smtp:Port"] ?? "587";
+                var smtpSsl  = builder.Configuration["Smtp:UseSsl"] ?? "false";
+                var smtpFrom = builder.Configuration["Smtp:FromEmail"] ?? "dina.adel.sobhi@gmail.com";
+                var smtpName = builder.Configuration["Smtp:FromName"] ?? "Notification Gateway";
+                var smtpUser = builder.Configuration["Smtp:Username"] ?? "dina.adel.sobhi@gmail.com";
+                var smtpPass = builder.Configuration["Smtp:Password"] ?? "";
+
+                var smtpConfigJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    Host = smtpHost,
+                    Port = int.Parse(smtpPort),
+                    UseSsl = bool.Parse(smtpSsl),
+                    FromEmail = smtpFrom,
+                    FromName = smtpName,
+                    Username = smtpUser,
+                    Password = smtpPass
+                });
+
                 db.TenantProviderConfigurations.AddRange(
                     NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
                         defaultTenantId, defaultAppId, "SMTP", NotificationGateway.Domain.Enums.NotificationChannel.Email,
-                        "{\"Host\":\"mock\",\"Port\":587,\"UseSsl\":false,\"FromEmail\":\"noreply@gateway.local\",\"FromName\":\"Notification Gateway\"}",
-                        null, true, 1),
+                        smtpConfigJson, null, true, 1),
                     NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
                         defaultTenantId, defaultAppId, "SIGNALR", NotificationGateway.Domain.Enums.NotificationChannel.SignalR,
                         "{}", null, true, 1),
@@ -245,7 +280,7 @@ using (var scope = app.Services.CreateScope())
                 app.Logger.LogInformation("Default Provider configurations for Email, SMS, WhatsApp, SignalR, and Webhook seeded successfully.");
             }
 
-            // Seed default NotificationType "ORDER_SHIPPED" and an active template
+            // Seed default NotificationType "ORDER_SHIPPED" and channel-specific active templates
             var defaultNotifType = db.NotificationTypeDefinitions.FirstOrDefault(t => t.TenantId == defaultTenantId && t.Code == "ORDER_SHIPPED");
             if (defaultNotifType == null)
             {
@@ -261,17 +296,64 @@ using (var scope = app.Services.CreateScope())
                     });
                 db.NotificationTypeDefinitions.Add(defaultNotifType);
                 db.SaveChanges();
+                app.Logger.LogInformation("Default ORDER_SHIPPED NotificationType seeded successfully.");
+            }
 
-                var defaultTemplate = NotificationGateway.Domain.Entities.NotificationTemplate.Create(
-                    defaultTenantId, defaultAppId, defaultNotifType.Id, NotificationGateway.Domain.Enums.NotificationChannel.Email,
-                    "en",
+            // Ensure each channel has its own tailored active template for ORDER_SHIPPED
+            var vars = new[] { "customerName", "orderId", "carrier", "trackingUrl" };
+            var channelTemplates = new (NotificationGateway.Domain.Enums.NotificationChannel Channel, string ContentJson, string? Subject)[]
+            {
+                (
+                    NotificationGateway.Domain.Enums.NotificationChannel.Email,
                     "{\"content\":\"<h1>Order Shipped</h1><p>Hi {{customerName}},</p><p>Your order <strong>{{orderId}}</strong> has been dispatched via {{carrier}}.</p><p><a href=\\\"{{trackingUrl}}\\\">Track Package</a></p>\"}",
-                    "Great news, {{customerName}}! Your order {{orderId}} is on the way",
-                    new[] { "customerName", "orderId", "carrier", "trackingUrl" });
-                defaultTemplate.Publish();
-                db.NotificationTemplates.Add(defaultTemplate);
+                    "Great news, {{customerName}}! Your order {{orderId}} is on the way"
+                ),
+                (
+                    NotificationGateway.Domain.Enums.NotificationChannel.Sms,
+                    "{\"message\":\"Hi {{customerName}}, your order {{orderId}} shipped via {{carrier}}. Track: {{trackingUrl}}\"}",
+                    null
+                ),
+                (
+                    NotificationGateway.Domain.Enums.NotificationChannel.WhatsApp,
+                    "{\"message\":\"*Order Shipped!* 🚚\\nHi {{customerName}},\\nYour order *{{orderId}}* has been dispatched via {{carrier}}.\\nTrack your package: {{trackingUrl}}\"}",
+                    null
+                ),
+                (
+                    NotificationGateway.Domain.Enums.NotificationChannel.SignalR,
+                    "{\"message\":\"Order {{orderId}} for {{customerName}} has been dispatched via {{carrier}}.\"}",
+                    "Order {{orderId}} Shipped"
+                ),
+                (
+                    NotificationGateway.Domain.Enums.NotificationChannel.Webhook,
+                    "{\"event\":\"ORDER_SHIPPED\",\"orderId\":\"{{orderId}}\",\"customerName\":\"{{customerName}}\",\"carrier\":\"{{carrier}}\",\"trackingUrl\":\"{{trackingUrl}}\" }",
+                    "ORDER_SHIPPED"
+                )
+            };
+
+            var existingChannels = db.NotificationTemplates
+                .Where(t => t.TenantId == defaultTenantId
+                         && t.NotificationTypeDefinitionId == defaultNotifType.Id
+                         && t.Status == NotificationGateway.Domain.Enums.TemplateStatus.Active)
+                .Select(t => t.Channel)
+                .ToHashSet();
+
+            var seededAnyTemplate = false;
+            foreach (var (channel, contentJson, subject) in channelTemplates)
+            {
+                if (!existingChannels.Contains(channel))
+                {
+                    var tpl = NotificationGateway.Domain.Entities.NotificationTemplate.Create(
+                        defaultTenantId, defaultAppId, defaultNotifType.Id, channel, "en", contentJson, subject, vars);
+                    tpl.Publish();
+                    db.NotificationTemplates.Add(tpl);
+                    seededAnyTemplate = true;
+                }
+            }
+
+            if (seededAnyTemplate)
+            {
                 db.SaveChanges();
-                app.Logger.LogInformation("Default ORDER_SHIPPED NotificationType and Active Template seeded successfully.");
+                app.Logger.LogInformation("Channel-specific ORDER_SHIPPED templates seeded successfully.");
             }
         }
         catch (Exception ex)

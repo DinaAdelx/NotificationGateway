@@ -14,6 +14,12 @@ public class OutboxProcessor(
     IBackgroundJobClient jobClient,
     ILogger<OutboxProcessor> logger)
 {
+    private static readonly JsonSerializerOptions _jsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
     [DisableConcurrentExecution(300)]
     public async Task ProcessAsync(CancellationToken ct = default)
     {
@@ -25,7 +31,7 @@ public class OutboxProcessor(
         {
             try
             {
-                var payload = JsonSerializer.Deserialize<OutboxPayload>(entry.PayloadJson);
+                var payload = JsonSerializer.Deserialize<OutboxPayload>(entry.PayloadJson, _jsonOpts);
                 if (payload is null) { await outboxRepo.MarkProcessedAsync(entry.Id, ct); continue; }
 
                 var notification = await notifRepo.GetByIdAsync(entry.TenantId, entry.NotificationId, ct);

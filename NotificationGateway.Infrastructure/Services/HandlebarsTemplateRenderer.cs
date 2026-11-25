@@ -2,11 +2,13 @@ using HandlebarsDotNet;
 using NotificationGateway.Application.Abstractions;
 using NotificationGateway.Domain.Enums;
 using NotificationGateway.Domain.Interfaces;
+using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace NotificationGateway.Infrastructure.Services;
 
-public class HandlebarsTemplateRenderer(ITemplateRepository templateRepo) : ITemplateRenderer
+public partial class HandlebarsTemplateRenderer(ITemplateRepository templateRepo) : ITemplateRenderer
 {
     public async Task<TemplateRenderResult?> RenderAsync(
         Guid tenantId, Guid applicationId, Guid notificationTypeId,
@@ -18,17 +20,45 @@ public class HandlebarsTemplateRenderer(ITemplateRepository templateRepo) : ITem
         if (template is null && language != "en")
             template = await templateRepo.GetActiveAsync(tenantId, applicationId, notificationTypeId, channel, "en", ct);
 
-        // Multi-channel fallback: if no channel-specific template exists, fall back to ANY active template for this notification type!
+        // Multi-channel fallback: if no channel-specific template exists, fall back to ANY active template for this notification type
+        var usedFallback = false;
         if (template is null)
         {
             var allTemplates = await templateRepo.GetAllAsync(tenantId, applicationId, null, notificationTypeId, ct);
             template = allTemplates.FirstOrDefault(t => t.Status == TemplateStatus.Active);
+            usedFallback = template is not null;
         }
 
         if (template is null) return null;
 
-        return Preview(template.ContentJson, template.Subject, payloadJson);
+        var result = Preview(template.ContentJson, template.Subject, payloadJson);
+
+        // Strip HTML tags if a plain-text channel (SMS, WhatsApp, Push, SignalR, InApp) fell back to an Email HTML template
+        if (usedFallback && template.Channel == NotificationChannel.Email && channel != NotificationChannel.Email)
+        {
+            var plainBody = StripHtml(result.Body);
+            return new TemplateRenderResult(plainBody, result.Subject);
+        }
+
+        return result;
     }
+
+    private static string StripHtml(string html)
+    {
+        var withNewlines = BlockBreakRegex().Replace(html, "\n");
+        var noTags = HtmlTagRegex().Replace(withNewlines, string.Empty);
+        var decoded = WebUtility.HtmlDecode(noTags);
+        return MultiWhitespaceRegex().Replace(decoded, " ").Replace(" \n ", "\n").Trim();
+    }
+
+    [GeneratedRegex(@"</?(p|div|br|h[1-6]|li|tr)\b[^>]*>", RegexOptions.IgnoreCase)]
+    private static partial Regex BlockBreakRegex();
+
+    [GeneratedRegex(@"<[^>]+>")]
+    private static partial Regex HtmlTagRegex();
+
+    [GeneratedRegex(@"[ \t]{2,}")]
+    private static partial Regex MultiWhitespaceRegex();
 
     public TemplateRenderResult Preview(string contentJson, string? subject, string payloadJson)
     {

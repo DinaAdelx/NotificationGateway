@@ -1,6 +1,158 @@
-@NotificationGateway.API_HostAddress = http://localhost:5022
+@Host = http://localhost:5022
+@TenantId = 11111111-1111-1111-1111-111111111111
+@AppId = 22222222-2222-2222-2222-222222222222
 
-GET {{NotificationGateway.API_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. List Seeded Notification Types (e.g. ORDER_SHIPPED)
+GET {{Host}}/api/v1/notification-types
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
 
 ###
+
+### 2. List Active Templates (verify per-channel templates)
+GET {{Host}}/api/v1/templates
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+
+###
+
+### 3. Send Multi-Channel Notification (Email + SMS + WhatsApp + SignalR + Webhook)
+# @name sendMulti
+POST {{Host}}/api/v1/notifications
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+Idempotency-Key: test-multi-{{$guid}}
+
+{
+  "type": "ORDER_SHIPPED",
+  "recipient": {
+    "externalUserId": "cust-500",
+    "email": "dina.adel.sobhi@gmail.com",
+    "phone": "+201000000000",
+    "webhookUrl": "http://localhost:5022/api/webhooks/receive-test"
+  },
+  "channels": [
+    "Email",
+    "Sms",
+    "WhatsApp",
+    "SignalR",
+    "Webhook"
+  ],
+  "language": "en",
+  "priority": "Normal",
+  "payload": {
+    "orderId": "ORD-2026-001",
+    "customerName": "Dina",
+    "carrier": "Aramex",
+    "trackingUrl": "https://aramex.com/track/ORD-2026-001"
+  },
+  "correlationId": "corr-ui-test-001"
+}
+
+###
+
+### 4. Send WhatsApp Only (Green API)
+POST {{Host}}/api/v1/notifications
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+Idempotency-Key: test-wa-{{$guid}}
+
+{
+  "type": "ORDER_SHIPPED",
+  "recipient": {
+    "externalUserId": "cust-500",
+    "phone": "+201000000000"
+  },
+  "channels": [
+    "WhatsApp"
+  ],
+  "language": "en",
+  "priority": "High",
+  "payload": {
+    "orderId": "ORD-WA-777",
+    "customerName": "Dina",
+    "carrier": "DHL",
+    "trackingUrl": "https://dhl.com/track/ORD-WA-777"
+  }
+}
+
+###
+
+### 5. Send SMS Only (Vonage)
+POST {{Host}}/api/v1/notifications
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+Idempotency-Key: test-sms-{{$guid}}
+
+{
+  "type": "ORDER_SHIPPED",
+  "recipient": {
+    "externalUserId": "cust-500",
+    "phone": "+201000000000"
+  },
+  "channels": [
+    "Sms"
+  ],
+  "language": "en",
+  "priority": "High",
+  "payload": {
+    "orderId": "ORD-SMS-888",
+    "customerName": "Dina",
+    "carrier": "FedEx",
+    "trackingUrl": "https://fedex.com/track/ORD-SMS-888"
+  }
+}
+
+###
+
+### 6. Track Delivery Status & Attempts (uses notificationId from request #3)
+@NotificationId = {{sendMulti.response.body.$.notificationId}}
+GET {{Host}}/api/v1/notifications/{{NotificationId}}/deliveries
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+
+###
+
+### 7. Inspect Received Webhooks (HMAC-SHA256 verified)
+GET {{Host}}/api/webhooks/received
+
+###
+
+### 8. Clear Received Webhooks
+POST {{Host}}/api/webhooks/clear
+
+###
+
+### 9. Create a Channel-Specific Template (Example: SMS for a NotificationType)
+# Replace <TYPE_ID> with a real NotificationTypeDefinition ID from request #1
+POST {{Host}}/api/v1/templates
+Content-Type: application/json
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}
+
+{
+  "notificationTypeDefinitionId": "00000000-0000-0000-0000-000000000000",
+  "channel": "Sms",
+  "language": "en",
+  "subject": null,
+  "content": {
+    "message": "Hi {{customerName}}, your order {{orderId}} shipped via {{carrier}}. Track: {{trackingUrl}}"
+  },
+  "variables": [
+    "customerName",
+    "orderId",
+    "carrier",
+    "trackingUrl"
+  ]
+}
+
+###
+
+### 10. Publish a Template
+# Replace <TEMPLATE_ID> with the ID returned from request #9
+POST {{Host}}/api/v1/templates/00000000-0000-0000-0000-000000000000/publish
+X-Tenant-Id: {{TenantId}}
+X-Application-Id: {{AppId}}

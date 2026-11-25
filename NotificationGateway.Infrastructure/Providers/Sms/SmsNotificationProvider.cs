@@ -1,14 +1,24 @@
 using NotificationGateway.Application.Abstractions;
 using NotificationGateway.Domain.Entities;
 using NotificationGateway.Domain.Enums;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text;
 
 namespace NotificationGateway.Infrastructure.Providers.Sms;
 
-public class SmsNotificationProvider(HttpClient httpClient, ILogger<SmsNotificationProvider> logger) : INotificationProvider
+/// <summary>
+/// SMS provider using Vonage REST API (https://rest.nexmo.com/sms/json).
+/// Falls back to simulation mode if no credentials are configured.
+/// </summary>
+public class SmsNotificationProvider(
+    HttpClient httpClient,
+    IConfiguration configuration,
+    ILogger<SmsNotificationProvider> logger) : INotificationProvider
 {
+    private const string VonageSmsUrl = "https://rest.nexmo.com/sms/json";
+
     public string ProviderCode => "SMS";
     public NotificationChannel Channel => NotificationChannel.Sms;
     public ProviderCapabilities Capabilities => new(SupportsDeliveryReceipt: true, SupportsScheduling: false, SupportsHtml: false);
@@ -20,40 +30,68 @@ public class SmsNotificationProvider(HttpClient httpClient, ILogger<SmsNotificat
     {
         try
         {
-            var config = !string.IsNullOrWhiteSpace(configuration.ConfigurationJson)
-                ? JsonSerializer.Deserialize<SmsConfig>(configuration.ConfigurationJson)
-                : null;
+            var cfg = ResolveConfig(configuration.ConfigurationJson);
 
-            // If real Twilio / Generic SMS Gateway configured
-            if (config != null && !string.IsNullOrWhiteSpace(config.GatewayUrl) && !string.IsNullOrWhiteSpace(config.AuthToken))
+            // Simulation mode — no real credentials
+            if (cfg == null || string.IsNullOrWhiteSpace(cfg.ApiKey) || string.IsNullOrWhiteSpace(cfg.ApiSecret))
             {
-                var payload = new
-                {
-                    from = config.SenderId ?? "NotifGateway",
-                    to = notification.RecipientAddress,
-                    body = notification.Body
-                };
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, config.GatewayUrl);
-                request.Headers.Add("Authorization", $"Bearer {config.AuthToken}");
-                request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-                var response = await httpClient.SendAsync(request, cancellationToken);
-                var respBody = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    logger.LogInformation("SMS dispatched successfully to {Recipient}", notification.RecipientAddress);
-                    return new ProviderSendResult(true, $"SM{Guid.NewGuid():N}", "sent", false, FailureCategory.None, null, null);
-                }
-
-                logger.LogWarning("SMS gateway returned error {StatusCode}: {Error}", response.StatusCode, respBody);
-                return new ProviderSendResult(false, null, "failed", true, FailureCategory.ProviderUnavailable, "SMS_GATEWAY_ERROR", respBody);
+                logger.LogInformation("[SMS Simulated] To: {Recipient} | Text: {Text}",
+                    notification.RecipientAddress, notification.Body);
+                return new ProviderSendResult(true, $"SM{Guid.NewGuid():N}", "simulated", false, FailureCategory.None, null, null);
             }
 
-            // High-throughput simulated / direct test dispatch
-            logger.LogInformation("[SMS Test Delivery] To: {Recipient} | Text: {Text}", notification.RecipientAddress, notification.Body);
-            return new ProviderSendResult(true, $"SM{Guid.NewGuid():N}", "delivered", false, FailureCategory.None, null, null);
+            // Vonage expects international format without '+' (e.g. 201012345678)
+            var toNumber = FormatPhoneNumber(notification.RecipientAddress);
+            var from = string.IsNullOrWhiteSpace(cfg.SenderId) ? "NotifGate" : cfg.SenderId;
+
+            var payload = new
+            {
+                api_key = cfg.ApiKey,
+                api_secret = cfg.ApiSecret,
+                to = toNumber,
+                from,
+                text = notification.Body
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, VonageSmsUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+
+            logger.LogInformation("Sending SMS via Vonage to {Recipient}", toNumber);
+
+            var response = await httpClient.SendAsync(request, cancellationToken);
+            var respBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Vonage HTTP error {StatusCode}: {Error}", response.StatusCode, respBody);
+                return new ProviderSendResult(false, null, "failed", true,
+                    FailureCategory.ProviderUnavailable, "VONAGE_HTTP_ERROR", $"{response.StatusCode}: {respBody}");
+            }
+
+            // Vonage returns HTTP 200 even on delivery rejection — inspect messages[0].status ("0" == OK)
+            using var doc = JsonDocument.Parse(respBody);
+            if (doc.RootElement.TryGetProperty("messages", out var messagesEl) && messagesEl.GetArrayLength() > 0)
+            {
+                var first = messagesEl[0];
+                var status = first.TryGetProperty("status", out var s) ? s.GetString() : null;
+                var msgId = first.TryGetProperty("message-id", out var id) ? id.GetString() : null;
+
+                if (status == "0")
+                {
+                    logger.LogInformation("SMS sent via Vonage. MessageId={MsgId}, To={Recipient}", msgId, toNumber);
+                    return new ProviderSendResult(true, msgId ?? $"SM{Guid.NewGuid():N}", "sent",
+                        false, FailureCategory.None, null, null);
+                }
+
+                var errorText = first.TryGetProperty("error-text", out var err) ? err.GetString() : respBody;
+                logger.LogWarning("Vonage rejected SMS (status {Status}): {Error}", status, errorText);
+                return new ProviderSendResult(false, msgId, "failed", true,
+                    FailureCategory.ProviderUnavailable, $"VONAGE_STATUS_{status}", errorText);
+            }
+
+            return new ProviderSendResult(true, $"SM{Guid.NewGuid():N}", "sent", false, FailureCategory.None, null, null);
         }
         catch (Exception ex)
         {
@@ -62,5 +100,28 @@ public class SmsNotificationProvider(HttpClient httpClient, ILogger<SmsNotificat
         }
     }
 
-    public record SmsConfig(string? GatewayUrl, string? AuthToken, string? SenderId);
+    private VonageSmsConfig? ResolveConfig(string? dbConfigJson)
+    {
+        var apiKey = configuration["Sms:ApiKey"];
+        var apiSecret = configuration["Sms:ApiSecret"];
+        var senderId = configuration["Sms:SenderId"];
+
+        if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(apiSecret))
+        {
+            return new VonageSmsConfig(apiKey, apiSecret, senderId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(dbConfigJson))
+        {
+            try { return JsonSerializer.Deserialize<VonageSmsConfig>(dbConfigJson); }
+            catch { /* fall through */ }
+        }
+
+        return null;
+    }
+
+    private static string FormatPhoneNumber(string phone) =>
+        phone.TrimStart('+').Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
+
+    public record VonageSmsConfig(string? ApiKey, string? ApiSecret, string? SenderId);
 }

@@ -1,4 +1,5 @@
 using MailKit.Net.Smtp;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MimeKit;
 using NotificationGateway.Application.Abstractions;
@@ -8,7 +9,9 @@ using System.Text.Json;
 
 namespace NotificationGateway.Infrastructure.Providers.Email;
 
-public class SmtpEmailProvider(ILogger<SmtpEmailProvider> logger) : INotificationProvider
+public class SmtpEmailProvider(
+    ILogger<SmtpEmailProvider> logger,
+    IConfiguration configuration) : INotificationProvider
 {
     public string ProviderCode => "SMTP";
     public NotificationChannel Channel => NotificationChannel.Email;
@@ -16,35 +19,32 @@ public class SmtpEmailProvider(ILogger<SmtpEmailProvider> logger) : INotificatio
 
     public async Task<ProviderSendResult> SendAsync(
         RenderedNotification notification,
-        TenantProviderConfiguration configuration,
+        TenantProviderConfiguration configuration_,
         CancellationToken cancellationToken)
     {
         try
         {
-            var config = !string.IsNullOrWhiteSpace(configuration.ConfigurationJson)
-                ? JsonSerializer.Deserialize<SmtpConfig>(configuration.ConfigurationJson)
-                : null;
+            // 1. Prefer appsettings.json "Smtp" section (tenant main account)
+            //    Fall back to DB provider config only if appsettings key is absent.
+            var smtpConfig = BuildConfigFromAppSettings()
+                             ?? ParseDbConfig(configuration_.ConfigurationJson);
 
-            if (config is null)
+            if (smtpConfig is null)
             {
-                logger.LogInformation("[Email Simulation] ProviderConfig was empty. Sending simulated email to {Recipient}", notification.RecipientAddress);
-                return new ProviderSendResult(true, $"sim_smtp-{Guid.NewGuid():N}", "sent", false, FailureCategory.None, null, null);
+                logger.LogWarning("[Email] No SMTP config found. Simulating delivery to {Recipient}.", notification.RecipientAddress);
+                return new ProviderSendResult(true, $"sim_smtp-{Guid.NewGuid():N}", "simulated", false, FailureCategory.None, null, null);
             }
 
-            // Check if test / mock mode
-            if (string.Equals(config.Host, "mock", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(config.Host, "test", StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(config.Password) ||
-                config.Password.Contains("YOUR_") ||
-                config.Password.Contains("APP_PASSWORD"))
+            // 2. Treat blank / placeholder passwords as simulation mode
+            if (IsSimulated(smtpConfig))
             {
-                logger.LogInformation("[Email Test Simulation] Smtp host is {Host} (test/mock mode). Subject: {Subject} | To: {Recipient}",
-                    config.Host, notification.Subject, notification.RecipientAddress);
+                logger.LogInformation("[Email Simulation] Subject: {Subject} | To: {Recipient}", notification.Subject, notification.RecipientAddress);
                 return new ProviderSendResult(true, $"sim_smtp-{Guid.NewGuid():N}", "delivered (simulated)", false, FailureCategory.None, null, null);
             }
 
+            // 3. Build & send via MailKit / Gmail SMTP
             var message = new MimeMessage();
-            message.From.Add(new MailboxAddress(config.FromName ?? "Notification Gateway", config.FromEmail));
+            message.From.Add(new MailboxAddress(smtpConfig.FromName ?? "Notification Gateway", smtpConfig.FromEmail));
             message.To.Add(MailboxAddress.Parse(notification.RecipientAddress));
             message.Subject = notification.Subject ?? "(no subject)";
 
@@ -56,22 +56,69 @@ public class SmtpEmailProvider(ILogger<SmtpEmailProvider> logger) : INotificatio
             message.Body = builder.ToMessageBody();
 
             using var smtp = new SmtpClient();
-            await smtp.ConnectAsync(config.Host, config.Port, config.UseSsl, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(config.Username))
-                await smtp.AuthenticateAsync(config.Username, config.Password, cancellationToken);
+
+            // Gmail: connect on port 587 with STARTTLS (UseSsl = false here, MailKit auto-upgrades)
+            var secureSocket = smtpConfig.UseSsl
+                ? MailKit.Security.SecureSocketOptions.SslOnConnect
+                : MailKit.Security.SecureSocketOptions.StartTls;
+
+            await smtp.ConnectAsync(smtpConfig.Host, smtpConfig.Port, secureSocket, cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(smtpConfig.Username))
+                await smtp.AuthenticateAsync(smtpConfig.Username, smtpConfig.Password, cancellationToken);
+
             var response = await smtp.SendAsync(message, cancellationToken);
             await smtp.DisconnectAsync(true, cancellationToken);
 
+            logger.LogInformation("[Email] Sent OK to {Recipient}. Response: {Response}", notification.RecipientAddress, response);
             return new ProviderSendResult(true, response, "sent", false, FailureCategory.None, null, null);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            logger.LogError(ex, "SMTP delivery failed for {Recipient}", notification.RecipientAddress);
+            logger.LogError(ex, "[Email] SMTP delivery failed for {Recipient}", notification.RecipientAddress);
             return new ProviderSendResult(false, null, "failed", true,
-                FailureCategory.ProviderUnavailable, "SMTP_ERROR", ex.Message.Length > 200 ? ex.Message[..200] : ex.Message);
+                FailureCategory.ProviderUnavailable, "SMTP_ERROR",
+                ex.Message.Length > 300 ? ex.Message[..300] : ex.Message);
         }
     }
 
-    private record SmtpConfig(string Host, int Port, bool UseSsl, string FromEmail, string? FromName, string? Username, string? Password);
+    // ---------------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------------
+
+    private SmtpConfig? BuildConfigFromAppSettings()
+    {
+        var host = configuration["Smtp:Host"];
+        if (string.IsNullOrWhiteSpace(host)) return null;
+
+        return new SmtpConfig(
+            Host:      host,
+            Port:      int.TryParse(configuration["Smtp:Port"], out var p) ? p : 587,
+            UseSsl:    bool.TryParse(configuration["Smtp:UseSsl"], out var ssl) && ssl,
+            FromEmail: configuration["Smtp:FromEmail"] ?? "noreply@gateway.local",
+            FromName:  configuration["Smtp:FromName"] ?? "Notification Gateway",
+            Username:  configuration["Smtp:Username"] ?? "",
+            Password:  configuration["Smtp:Password"] ?? "");
+    }
+
+    private static SmtpConfig? ParseDbConfig(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}") return null;
+        try { return JsonSerializer.Deserialize<SmtpConfig>(json); }
+        catch { return null; }
+    }
+
+    private static bool IsSimulated(SmtpConfig cfg) =>
+        string.Equals(cfg.Host, "mock", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(cfg.Host, "test", StringComparison.OrdinalIgnoreCase) ||
+        string.IsNullOrWhiteSpace(cfg.Password) ||
+        cfg.Password.Contains("YOUR_") ||
+        cfg.Password.Contains("PASTE_") ||
+        cfg.Password.Contains("APP_PASSWORD");
+
+    private record SmtpConfig(
+        string Host, int Port, bool UseSsl,
+        string FromEmail, string? FromName,
+        string? Username, string? Password);
 }
