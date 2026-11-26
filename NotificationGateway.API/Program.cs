@@ -243,49 +243,9 @@ using (var scope = app.Services.CreateScope())
                 app.Logger.LogInformation("Default Tenant ({TenantId}) and ApplicationClient ({AppId}) seeded successfully.", defaultTenantId, defaultAppId);
             }
 
-            // Seed default provider configurations for Email, SMS, WhatsApp, SignalR, Webhook
-            if (!db.TenantProviderConfigurations.Any(c => c.TenantId == defaultTenantId))
-            {
-                // Build real Gmail SMTP config from appsettings.json
-                var smtpHost = builder.Configuration["Smtp:Host"] ?? "smtp.gmail.com";
-                var smtpPort = builder.Configuration["Smtp:Port"] ?? "587";
-                var smtpSsl  = builder.Configuration["Smtp:UseSsl"] ?? "false";
-                var smtpFrom = builder.Configuration["Smtp:FromEmail"] ?? "dina.adel.sobhi@gmail.com";
-                var smtpName = builder.Configuration["Smtp:FromName"] ?? "Notification Gateway";
-                var smtpUser = builder.Configuration["Smtp:Username"] ?? "dina.adel.sobhi@gmail.com";
-                var smtpPass = builder.Configuration["Smtp:Password"] ?? "";
-
-                var smtpConfigJson = System.Text.Json.JsonSerializer.Serialize(new
-                {
-                    Host = smtpHost,
-                    Port = int.Parse(smtpPort),
-                    UseSsl = bool.Parse(smtpSsl),
-                    FromEmail = smtpFrom,
-                    FromName = smtpName,
-                    Username = smtpUser,
-                    Password = smtpPass
-                });
-
-                db.TenantProviderConfigurations.AddRange(
-                    NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
-                        defaultTenantId, defaultAppId, "SMTP", NotificationGateway.Domain.Enums.NotificationChannel.Email,
-                        smtpConfigJson, null, true, 1),
-                    NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
-                        defaultTenantId, defaultAppId, "SIGNALR", NotificationGateway.Domain.Enums.NotificationChannel.SignalR,
-                        "{}", null, true, 1),
-                    NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
-                        defaultTenantId, defaultAppId, "SMS", NotificationGateway.Domain.Enums.NotificationChannel.Sms,
-                        "{\"SenderId\":\"Gateway\"}", null, true, 1),
-                    NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
-                        defaultTenantId, defaultAppId, "WHATSAPP", NotificationGateway.Domain.Enums.NotificationChannel.WhatsApp,
-                        "{}", null, true, 1),
-                    NotificationGateway.Domain.Entities.TenantProviderConfiguration.Create(
-                        defaultTenantId, defaultAppId, "WEBHOOK", NotificationGateway.Domain.Enums.NotificationChannel.Webhook,
-                        "{\"SecretKey\":\"whsec_default_gateway_secret_2026!\"}", null, true, 1)
-                );
-                db.SaveChanges();
-                app.Logger.LogInformation("Default Provider configurations for Email, SMS, WhatsApp, SignalR, and Webhook seeded successfully.");
-            }
+            // Remove any legacy seeded tenant-wide default provider configurations (UserId IS NULL)
+            // so every user manages their own dynamic settings without pre-filled defaults.
+            db.Database.ExecuteSqlRaw("DELETE FROM TenantProviderConfigurations WHERE UserId IS NULL;");
 
             // Seed default NotificationType "ORDER_SHIPPED" and channel-specific active templates
             var defaultNotifType = db.NotificationTypeDefinitions.FirstOrDefault(t => t.TenantId == defaultTenantId && t.Code == "ORDER_SHIPPED");

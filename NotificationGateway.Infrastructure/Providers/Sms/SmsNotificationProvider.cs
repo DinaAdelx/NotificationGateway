@@ -104,27 +104,16 @@ public class SmsNotificationProvider(
 
     private VonageSmsConfig? ResolveConfig(string? dbConfigJson)
     {
-        // Priority 1: Per-tenant DB ConfigurationJson (editable via UI/API)
-        if (!string.IsNullOrWhiteSpace(dbConfigJson) && dbConfigJson != "{}")
-        {
-            try
-            {
-                var dbCfg = JsonSerializer.Deserialize<VonageSmsConfig>(dbConfigJson, _jsonOpts);
-                if (dbCfg is not null && !string.IsNullOrWhiteSpace(dbCfg.ApiKey) && !string.IsNullOrWhiteSpace(dbCfg.ApiSecret))
-                    return dbCfg;
-            }
-            catch { /* fall through */ }
-        }
+        if (string.IsNullOrWhiteSpace(dbConfigJson) || dbConfigJson == "{}")
+            return null;
 
-        // Priority 2: appsettings.json "Sms" section
-        var apiKey = configuration["Sms:ApiKey"];
-        var apiSecret = configuration["Sms:ApiSecret"];
-        var senderId = configuration["Sms:SenderId"];
-
-        if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(apiSecret))
+        try
         {
-            return new VonageSmsConfig(apiKey, apiSecret, senderId);
+            var dbCfg = JsonSerializer.Deserialize<VonageSmsConfig>(dbConfigJson, _jsonOpts);
+            if (dbCfg is not null && !string.IsNullOrWhiteSpace(dbCfg.ApiKey) && !string.IsNullOrWhiteSpace(dbCfg.ApiSecret))
+                return dbCfg;
         }
+        catch { /* fall through */ }
 
         return null;
     }

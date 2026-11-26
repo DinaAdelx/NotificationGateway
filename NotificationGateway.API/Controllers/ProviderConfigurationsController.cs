@@ -17,7 +17,6 @@ public class ProviderConfigurationsController(
     NotificationContext context,
     IProviderConfigurationRepository repo,
     NotificationGatewayDbContext db,
-    IConfiguration appConfig,
     IUnitOfWork uow) : ControllerBase
 {
     public record CreateProviderConfigRequest(
@@ -47,13 +46,15 @@ public class ProviderConfigurationsController(
         }
 
         var userId = CurrentUserId;
-        var all = await db.TenantProviderConfigurations
-            .AsNoTracking()
-            .Where(c => c.TenantId == context.TenantId
-                     && c.ApplicationId == context.ApplicationId
-                     && c.IsEnabled
-                     && (c.UserId == null || (userId.HasValue && c.UserId == userId.Value)))
-            .ToListAsync(ct);
+        var userConfigs = userId.HasValue
+            ? await db.TenantProviderConfigurations
+                .AsNoTracking()
+                .Where(c => c.TenantId == context.TenantId
+                         && c.ApplicationId == context.ApplicationId
+                         && c.IsEnabled
+                         && c.UserId == userId.Value)
+                .ToListAsync(ct)
+            : new List<TenantProviderConfiguration>();
 
         var targetChannels = new[]
         {
@@ -65,22 +66,17 @@ public class ProviderConfigurationsController(
 
         var result = targetChannels.Select(target =>
         {
-            var userRow = userId.HasValue
-                ? all.FirstOrDefault(c => c.Channel == target.Channel && c.UserId == userId.Value)
-                : null;
-            var tenantRow = all.FirstOrDefault(c => c.Channel == target.Channel && c.UserId == null);
-            var activeRow = userRow ?? tenantRow;
-
+            var userRow = userConfigs.FirstOrDefault(c => c.Channel == target.Channel);
             return new
             {
-                Id = activeRow?.Id ?? Guid.Empty,
-                ProviderCode = activeRow?.ProviderCode ?? target.ProviderCode,
+                Id = userRow?.Id ?? Guid.Empty,
+                ProviderCode = userRow?.ProviderCode ?? target.ProviderCode,
                 Channel = target.Channel.ToString(),
-                IsEnabled = activeRow?.IsEnabled ?? true,
-                IsPrimary = activeRow?.IsPrimary ?? true,
-                IsUserCustom = userRow is not null,
-                Configuration = ParseOrFallback(target.Channel, activeRow?.ConfigurationJson),
-                UpdatedAt = activeRow?.UpdatedAt
+                IsEnabled = userRow?.IsEnabled ?? false,
+                IsPrimary = userRow?.IsPrimary ?? false,
+                IsConfigured = userRow is not null,
+                Configuration = ParseConfigOrNull(userRow?.ConfigurationJson),
+                UpdatedAt = userRow?.UpdatedAt
             };
         });
 
@@ -116,7 +112,7 @@ public class ProviderConfigurationsController(
 
     /// <summary>
     /// Creates or updates the authenticated user's own provider configuration for a channel.
-    /// Persists in SQL Server and takes priority over tenant/appsettings defaults.
+    /// Persists in SQL Server with no default fallback.
     /// </summary>
     [HttpPut("upsert")]
     [HttpPost("upsert")]
@@ -144,7 +140,7 @@ public class ProviderConfigurationsController(
                 Channel = existing.Channel.ToString(),
                 existing.IsEnabled,
                 existing.IsPrimary,
-                IsUserCustom = userId.HasValue,
+                IsConfigured = true,
                 Message = $"Your {existing.Channel} ({existing.ProviderCode}) settings were updated and saved."
             });
         }
@@ -170,7 +166,7 @@ public class ProviderConfigurationsController(
             Channel = created.Channel.ToString(),
             created.IsEnabled,
             created.IsPrimary,
-            IsUserCustom = userId.HasValue,
+            IsConfigured = true,
             Message = $"Your {created.Channel} ({created.ProviderCode}) settings were saved."
         });
     }
@@ -184,44 +180,19 @@ public class ProviderConfigurationsController(
         return NoContent();
     }
 
-    private JsonElement ParseOrFallback(NotificationChannel channel, string? dbJson)
+    private static JsonElement? ParseConfigOrNull(string? dbJson)
     {
-        if (!string.IsNullOrWhiteSpace(dbJson) && dbJson != "{}")
+        if (string.IsNullOrWhiteSpace(dbJson) || dbJson == "{}")
+            return null;
+
+        try
         {
-            try
-            {
-                using var doc = JsonDocument.Parse(dbJson);
-                return doc.RootElement.Clone();
-            }
-            catch { /* fall through */ }
+            using var doc = JsonDocument.Parse(dbJson);
+            return doc.RootElement.Clone();
         }
-
-        object fallback = channel switch
+        catch
         {
-            NotificationChannel.Sms => new
-            {
-                ApiKey = appConfig["Sms:ApiKey"] ?? "",
-                ApiSecret = appConfig["Sms:ApiSecret"] ?? "",
-                SenderId = appConfig["Sms:SenderId"] ?? "NotifGate"
-            },
-            NotificationChannel.WhatsApp => new
-            {
-                IdInstance = appConfig["WhatsApp:IdInstance"] ?? "",
-                ApiToken = appConfig["WhatsApp:ApiToken"] ?? ""
-            },
-            NotificationChannel.Email => new
-            {
-                Host = appConfig["Smtp:Host"] ?? "smtp.gmail.com",
-                Port = int.TryParse(appConfig["Smtp:Port"], out var p) ? p : 587,
-                UseSsl = bool.TryParse(appConfig["Smtp:UseSsl"], out var ssl) && ssl,
-                FromEmail = appConfig["Smtp:FromEmail"] ?? "",
-                FromName = appConfig["Smtp:FromName"] ?? "Notification Gateway",
-                Username = appConfig["Smtp:Username"] ?? "",
-                Password = appConfig["Smtp:Password"] ?? ""
-            },
-            _ => new { }
-        };
-
-        return JsonSerializer.SerializeToElement(fallback);
+            return null;
+        }
     }
 }

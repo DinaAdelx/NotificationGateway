@@ -579,53 +579,43 @@ class NotificationGatewayApp {
                 return key ? (obj[key] ?? '') : '';
             };
 
-            const setStatus = (elId, isReal, isUserCustom) => {
+            const setStatus = (elId, isConfigured) => {
                 const el = document.getElementById(elId);
                 if (!el) return;
-                const scopeLabel = isUserCustom ? 'My Saved Config' : 'Default';
-                el.textContent = `${isReal ? 'Configured' : 'Simulated'} · ${scopeLabel}`;
-                el.className = isUserCustom
-                    ? 'badge bg-primary-subtle text-primary'
-                    : (isReal ? 'badge bg-success-subtle text-success' : 'badge bg-warning-subtle text-warning');
+                el.textContent = isConfigured ? 'Saved' : 'Not Configured';
+                el.className = isConfigured
+                    ? 'badge bg-success-subtle text-success'
+                    : 'badge bg-secondary-subtle text-secondary';
             };
 
             const smtpItem = list.find(x => x.channel === 'Email');
             const smtp = smtpItem?.configuration;
-            if (smtp) {
-                document.getElementById('cfgSmtpHost').value = getProp(smtp, 'Host');
-                document.getElementById('cfgSmtpPort').value = getProp(smtp, 'Port') || 587;
-                document.getElementById('cfgSmtpUseSsl').checked = Boolean(getProp(smtp, 'UseSsl'));
-                document.getElementById('cfgSmtpFromEmail').value = getProp(smtp, 'FromEmail');
-                document.getElementById('cfgSmtpFromName').value = getProp(smtp, 'FromName');
-                document.getElementById('cfgSmtpUsername').value = getProp(smtp, 'Username');
-                document.getElementById('cfgSmtpPassword').value = getProp(smtp, 'Password');
-                const pwd = String(getProp(smtp, 'Password'));
-                setStatus('badgeStatusEmail', Boolean(getProp(smtp, 'Host')) && Boolean(pwd) && !pwd.includes('PASTE_'), Boolean(smtpItem?.isUserCustom));
-            }
+            document.getElementById('cfgSmtpHost').value = smtp ? getProp(smtp, 'Host') : '';
+            document.getElementById('cfgSmtpPort').value = smtp ? (getProp(smtp, 'Port') || '') : '';
+            document.getElementById('cfgSmtpUseSsl').checked = smtp ? Boolean(getProp(smtp, 'UseSsl')) : false;
+            document.getElementById('cfgSmtpFromEmail').value = smtp ? getProp(smtp, 'FromEmail') : '';
+            document.getElementById('cfgSmtpFromName').value = smtp ? getProp(smtp, 'FromName') : '';
+            document.getElementById('cfgSmtpUsername').value = smtp ? getProp(smtp, 'Username') : '';
+            document.getElementById('cfgSmtpPassword').value = smtp ? getProp(smtp, 'Password') : '';
+            setStatus('badgeStatusEmail', Boolean(smtpItem?.isConfigured));
 
             const smsItem = list.find(x => x.channel === 'Sms');
             const sms = smsItem?.configuration;
-            if (sms) {
-                document.getElementById('cfgSmsApiKey').value = getProp(sms, 'ApiKey');
-                document.getElementById('cfgSmsApiSecret').value = getProp(sms, 'ApiSecret');
-                document.getElementById('cfgSmsSenderId').value = getProp(sms, 'SenderId') || 'NotifGate';
-                setStatus('badgeStatusSms', Boolean(getProp(sms, 'ApiKey')) && Boolean(getProp(sms, 'ApiSecret')), Boolean(smsItem?.isUserCustom));
-            }
+            document.getElementById('cfgSmsApiKey').value = sms ? getProp(sms, 'ApiKey') : '';
+            document.getElementById('cfgSmsApiSecret').value = sms ? getProp(sms, 'ApiSecret') : '';
+            document.getElementById('cfgSmsSenderId').value = sms ? getProp(sms, 'SenderId') : '';
+            setStatus('badgeStatusSms', Boolean(smsItem?.isConfigured));
 
             const waItem = list.find(x => x.channel === 'WhatsApp');
             const wa = waItem?.configuration;
-            if (wa) {
-                document.getElementById('cfgWaIdInstance').value = getProp(wa, 'IdInstance');
-                document.getElementById('cfgWaApiToken').value = getProp(wa, 'ApiToken');
-                setStatus('badgeStatusWhatsApp', Boolean(getProp(wa, 'IdInstance')) && Boolean(getProp(wa, 'ApiToken')), Boolean(waItem?.isUserCustom));
-            }
+            document.getElementById('cfgWaIdInstance').value = wa ? getProp(wa, 'IdInstance') : '';
+            document.getElementById('cfgWaApiToken').value = wa ? getProp(wa, 'ApiToken') : '';
+            setStatus('badgeStatusWhatsApp', Boolean(waItem?.isConfigured));
 
             const whItem = list.find(x => x.channel === 'Webhook');
             const wh = whItem?.configuration;
-            if (wh) {
-                document.getElementById('cfgWebhookSecret').value = getProp(wh, 'SecretKey');
-                setStatus('badgeStatusWebhook', Boolean(getProp(wh, 'SecretKey')), Boolean(whItem?.isUserCustom));
-            }
+            document.getElementById('cfgWebhookSecret').value = wh ? getProp(wh, 'SecretKey') : '';
+            setStatus('badgeStatusWebhook', Boolean(whItem?.isConfigured));
         } catch (err) {
             console.warn('Provider settings load error:', err);
         }

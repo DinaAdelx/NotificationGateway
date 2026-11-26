@@ -24,12 +24,8 @@ public class SmtpEmailProvider(
     {
         try
         {
-            // 1. Prefer per-tenant DB config (updated via UI/API) if it has real credentials,
-            //    otherwise fall back to appsettings.json "Smtp" section.
-            var dbConfig = ParseDbConfig(configuration_.ConfigurationJson);
-            var smtpConfig = (dbConfig is not null && !IsSimulated(dbConfig))
-                ? dbConfig
-                : BuildConfigFromAppSettings() ?? dbConfig;
+            // Use only the saved DB provider config (no appsettings.json defaults)
+            var smtpConfig = ParseDbConfig(configuration_.ConfigurationJson);
 
             if (smtpConfig is null)
             {
