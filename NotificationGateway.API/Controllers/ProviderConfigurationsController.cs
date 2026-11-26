@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NotificationGateway.API.Authentication;
+using NotificationGateway.Application.Abstractions;
 using NotificationGateway.Domain.Entities;
 using NotificationGateway.Domain.Enums;
 using NotificationGateway.Domain.Interfaces;
@@ -17,6 +18,7 @@ public class ProviderConfigurationsController(
     NotificationContext context,
     IProviderConfigurationRepository repo,
     NotificationGatewayDbContext db,
+    ICredentialEncryptor encryptor,
     IUnitOfWork uow) : ControllerBase
 {
     public record CreateProviderConfigRequest(
@@ -75,7 +77,7 @@ public class ProviderConfigurationsController(
                 IsEnabled = userRow?.IsEnabled ?? false,
                 IsPrimary = userRow?.IsPrimary ?? false,
                 IsConfigured = userRow is not null,
-                Configuration = ParseConfigOrNull(userRow?.ConfigurationJson),
+                Configuration = DecryptOrParse(userRow?.EncryptedCredentials, userRow?.ConfigurationJson),
                 UpdatedAt = userRow?.UpdatedAt
             };
         });
@@ -95,13 +97,18 @@ public class ProviderConfigurationsController(
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreateProviderConfigRequest request, CancellationToken ct)
     {
+        var rawJson = request.Configuration.GetRawText();
+        var encrypted = !string.IsNullOrWhiteSpace(request.EncryptedCredentials)
+            ? request.EncryptedCredentials
+            : encryptor.Encrypt(rawJson);
+
         var config = TenantProviderConfiguration.Create(
             context.TenantId,
             context.ApplicationId,
             request.ProviderCode,
             request.Channel,
-            request.Configuration.GetRawText(),
-            request.EncryptedCredentials,
+            "{}",
+            encrypted,
             request.IsPrimary,
             request.Priority);
 
@@ -112,7 +119,7 @@ public class ProviderConfigurationsController(
 
     /// <summary>
     /// Creates or updates the authenticated user's own provider configuration for a channel.
-    /// Persists in SQL Server with no default fallback.
+    /// Encrypts credentials at rest using AES-256-CBC (ICredentialEncryptor).
     /// </summary>
     [HttpPut("upsert")]
     [HttpPost("upsert")]
@@ -128,10 +135,12 @@ public class ProviderConfigurationsController(
                 && c.ProviderCode == request.ProviderCode, ct);
 
         var rawJson = request.Configuration.GetRawText();
+        var encrypted = encryptor.Encrypt(rawJson);
 
         if (existing is not null)
         {
-            existing.UpdateConfiguration(rawJson, request.IsPrimary, request.Priority);
+            existing.UpdateConfiguration("{}", request.IsPrimary, request.Priority);
+            existing.UpdateCredentials(encrypted);
             await uow.SaveChangesAsync(ct);
             return Ok(new
             {
@@ -141,7 +150,7 @@ public class ProviderConfigurationsController(
                 existing.IsEnabled,
                 existing.IsPrimary,
                 IsConfigured = true,
-                Message = $"Your {existing.Channel} ({existing.ProviderCode}) settings were updated and saved."
+                Message = $"Your {existing.Channel} ({existing.ProviderCode}) settings were encrypted and saved."
             });
         }
 
@@ -150,8 +159,8 @@ public class ProviderConfigurationsController(
             context.ApplicationId,
             request.ProviderCode,
             request.Channel,
-            rawJson,
-            null,
+            "{}",
+            encrypted,
             request.IsPrimary,
             request.Priority,
             userId);
@@ -167,7 +176,7 @@ public class ProviderConfigurationsController(
             created.IsEnabled,
             created.IsPrimary,
             IsConfigured = true,
-            Message = $"Your {created.Channel} ({created.ProviderCode}) settings were saved."
+            Message = $"Your {created.Channel} ({created.ProviderCode}) settings were encrypted and saved."
         });
     }
 
@@ -180,14 +189,21 @@ public class ProviderConfigurationsController(
         return NoContent();
     }
 
-    private static JsonElement? ParseConfigOrNull(string? dbJson)
+    private JsonElement? DecryptOrParse(string? encryptedCredentials, string? dbJson)
     {
-        if (string.IsNullOrWhiteSpace(dbJson) || dbJson == "{}")
+        var jsonToParse = dbJson;
+        if (!string.IsNullOrWhiteSpace(encryptedCredentials))
+        {
+            try { jsonToParse = encryptor.Decrypt(encryptedCredentials); }
+            catch { /* fall back to dbJson */ }
+        }
+
+        if (string.IsNullOrWhiteSpace(jsonToParse) || jsonToParse == "{}")
             return null;
 
         try
         {
-            using var doc = JsonDocument.Parse(dbJson);
+            using var doc = JsonDocument.Parse(jsonToParse);
             return doc.RootElement.Clone();
         }
         catch

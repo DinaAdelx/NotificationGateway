@@ -12,6 +12,7 @@ namespace NotificationGateway.API.Controllers;
 
 [ApiController]
 [Route("api/v1/notification-types")]
+[Authorize]
 public class NotificationTypesController(
     IMediator mediator,
     NotificationContext context,

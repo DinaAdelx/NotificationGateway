@@ -19,4 +19,6 @@ public interface IProviderResolver
         NotificationChannel channel,
         string primaryProviderCode,
         CancellationToken ct = default);
+
+    INotificationProvider? GetProvider(string providerCode);
 }

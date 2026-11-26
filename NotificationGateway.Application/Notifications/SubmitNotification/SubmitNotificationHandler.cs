@@ -75,7 +75,8 @@ public class SubmitNotificationHandler(
             notifType.Id, notifType.Code, notifType.SchemaVersion,
             payloadJson, request.Priority,
             request.IdempotencyKey, request.CorrelationId,
-            request.Metadata?.GetRawText(), request.ScheduledAt, request.UserId);
+            request.Metadata?.GetRawText(), request.ScheduledAt, request.UserId,
+            request.Language);
 
         await notificationRepo.AddAsync(notification, ct);
 

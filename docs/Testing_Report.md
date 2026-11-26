@@ -7,10 +7,21 @@
   dotnet test NotificationGateway.Tests/NotificationGateway.Tests.csproj --no-restore
   ```
 - **Latest Observed Result**:
-  - **Total**: 15
-  - **Passed**: 15
+  - **Total**: 22
+  - **Passed**: 22
   - **Failed**: 0
   - **Skipped**: 0
+
+### Covered Integration & Lifecycle Tests (`NotificationGateway.Tests/Integration/GatewayLifecycleTests.cs`)
+| Test | Area Verified |
+|---|---|
+| `TenantMiddleware_RejectsCrossTenantHeaderSpoofing_With403` | Rejects mismatched `X-Tenant-Id` header vs JWT claim (`403 Forbidden`) |
+| `TenantMiddleware_ValidatesXApiKey_AndBlocksInvalidKey` | Validates `X-Api-Key` against `ApplicationClients` and rejects invalid keys (`401`) |
+| `ProviderConfig_UpsertEncryptsAtRest_AndDecryptsOnRead` | Encrypts provider secrets at rest via `ICredentialEncryptor` (AES-256-CBC) and decrypts on read |
+| `DeliveryDispatcher_FailsOverToSecondaryProvider_WhenPrimaryFails` | Executes secondary-provider failover via `ResolveFallbacksAsync` |
+| `DeliveryDispatcher_SchedulesHangfireRetryOnTransientFailure_AndRecovers` | Schedules real Hangfire delayed retry (`ScheduledState`), verifies non-English (`ar`) localization, and recovers on retry |
+| `OutboxProcessor_EnforcesUserPreferenceOptOut` | Enforces `UserPreference.PreferredChannels` opt-out before creating deliveries |
+| `PushAndVoiceProviders_SimulatedSend_Succeed` | Verifies `PushNotificationProvider` and `VoiceNotificationProvider` |
 
 ### Covered Unit Test Cases (`NotificationGateway.Tests/Unit/CoreTests.cs`)
 | Test | Area Verified |

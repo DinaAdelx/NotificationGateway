@@ -16,8 +16,10 @@ using NotificationGateway.Infrastructure.Persistence;
 using NotificationGateway.Infrastructure.Persistence.Repositories;
 using NotificationGateway.Infrastructure.Providers.Email;
 using NotificationGateway.Infrastructure.Providers.InApp;
+using NotificationGateway.Infrastructure.Providers.Push;
 using NotificationGateway.Infrastructure.Providers.SignalR;
 using NotificationGateway.Infrastructure.Providers.Sms;
+using NotificationGateway.Infrastructure.Providers.Voice;
 using NotificationGateway.Infrastructure.Providers.WhatsApp;
 using NotificationGateway.Infrastructure.Providers.Webhook;
 using NotificationGateway.Infrastructure.Security;
@@ -122,6 +124,7 @@ builder.Services.AddScoped<IOutboxRepository, OutboxRepository>();
 builder.Services.AddScoped<IDeliveryRepository, DeliveryRepository>();
 builder.Services.AddScoped<IProviderConfigurationRepository, ProviderConfigurationRepository>();
 builder.Services.AddScoped<IRoutingRepository, RoutingRepository>();
+builder.Services.AddScoped<IUserPreferenceRepository, UserPreferenceRepository>();
 
 // Core Services & Auth
 builder.Services.AddScoped<IPayloadValidator, JsonSchemaPayloadValidator>();
@@ -136,11 +139,21 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<SmsNotificationProvider>();
 builder.Services.AddHttpClient<WebhookNotificationProvider>();
 builder.Services.AddHttpClient<WhatsAppNotificationProvider>();
+builder.Services.AddHttpClient<PushNotificationProvider>();
+builder.Services.AddHttpClient<VoiceNotificationProvider>();
 
 // Providers & Resolver
 builder.Services.AddScoped<INotificationProvider, InAppProvider>();
 builder.Services.AddScoped<INotificationProvider, SmtpEmailProvider>();
 builder.Services.AddScoped<INotificationProvider, SignalRNotificationProvider>();
+builder.Services.AddScoped<INotificationProvider>(sp =>
+    new PushNotificationProvider(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PushNotificationProvider)),
+        sp.GetRequiredService<ILogger<PushNotificationProvider>>()));
+builder.Services.AddScoped<INotificationProvider>(sp =>
+    new VoiceNotificationProvider(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(VoiceNotificationProvider)),
+        sp.GetRequiredService<ILogger<VoiceNotificationProvider>>()));
 // SMS, WhatsApp, Webhook use typed HttpClient — register via factory so DI injects the typed client
 builder.Services.AddScoped<INotificationProvider>(sp =>
     new SmsNotificationProvider(
@@ -213,12 +226,14 @@ using (var scope = app.Services.CreateScope())
             db.Database.Migrate();
             app.Logger.LogInformation("SQL Server database and all entity tables migrated/created successfully.");
 
-            // Ensure per-user UserId columns exist for dynamic per-user provider settings & notifications
+            // Ensure per-user UserId & Language columns exist
             db.Database.ExecuteSqlRaw(@"
                 IF COL_LENGTH('TenantProviderConfigurations', 'UserId') IS NULL
                     ALTER TABLE TenantProviderConfigurations ADD UserId UNIQUEIDENTIFIER NULL;
                 IF COL_LENGTH('Notifications', 'UserId') IS NULL
-                    ALTER TABLE Notifications ADD UserId UNIQUEIDENTIFIER NULL;");
+                    ALTER TABLE Notifications ADD UserId UNIQUEIDENTIFIER NULL;
+                IF COL_LENGTH('Notifications', 'Language') IS NULL
+                    ALTER TABLE Notifications ADD Language NVARCHAR(16) NOT NULL DEFAULT 'en';");
 
             // Seed default test tenant and application client if they don't exist
             var defaultTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");

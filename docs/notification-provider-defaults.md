@@ -1,97 +1,63 @@
-# Notification Gateway --- Default Provider Settings
+# Notification Gateway --- Provider Settings Reference
 
-This document describes the default configuration for the notification
+This document describes the configuration schema for the notification
 channels supported by **NotificationGateway**.
 
-> **Important:** These values contain credentials and should be treated
-> as secrets. Do not commit this file to a public repository, share it
-> publicly, or include it in client-side code. Prefer environment
-> variables or a secrets manager for production deployments.
+> **Important:** Never commit real API keys, tokens, or passwords to source
+> control. Store secrets in **User Secrets**, `appsettings.Development.json`
+> (gitignored), environment variables, or per-user encrypted settings via
+> `PUT /api/v1/provider-configurations/upsert` (encrypted at rest with AES-256-CBC).
 
 ## Supported notification channels
 
-### 1. SMS
+### 1. SMS (Vonage)
 
-**Provider settings**
+  Setting       Description
+  ------------- ---------------------------------------
+  `ApiKey`      Vonage API Key (`<VONAGE_API_KEY>`)
+  `ApiSecret`   Vonage API Secret (`<VONAGE_API_SECRET>`)
+  `SenderId`    Alphanumeric sender ID (e.g. `NotifGate`)
 
-  Setting       Default value
-  ------------- --------------------
-  `ApiKey`      `ded500b6`
-  `ApiSecret`   `YDuxkURrQ57fZSop`
-  `SenderId`    `NotifGate`
+### 2. WhatsApp (Green API)
 
-**Recipient limitation**
-
-> **SMS can only be sent to `01008552396` due to provider limitations.**
-> Sending SMS messages to any other number is not supported by the
-> current provider configuration.
-
-### 2. WhatsApp
-
-**Provider settings**
-
-  Setting        Default value
-  -------------- ------------------------------------------------------
-  `IdInstance`   `710722813665`
-  `ApiToken`     `a593a27806d548489d40d9b027934d6795452172a7d34b4e8c`
+  Setting        Description
+  -------------- ------------------------------------------
+  `IdInstance`   Green API Instance ID (`<GREEN_ID>`)
+  `ApiToken`     Green API Token (`<GREEN_API_TOKEN>`)
 
 ### 3. SMTP (Email)
 
-**Server settings**
+  Setting       Description
+  ------------- ------------------------------------------
+  `Host`        SMTP host (e.g. `smtp.gmail.com`)
+  `Port`        SMTP port (`587` for STARTTLS)
+  `UseSsl`      `false` for STARTTLS, `true` for port `465`
+  `FromEmail`   Sender email address
+  `FromName`    Sender display name
+  `Username`    SMTP username
+  `Password`    16-character Gmail App Password (`<APP_PASSWORD>`)
 
-  Setting    Default value
-  ---------- ------------------
-  `Host`     `smtp.gmail.com`
-  `Port`     `587`
-  `UseSsl`   `false`
+## Configuration JSON reference
 
-**Sender settings**
-
-  Setting       Default value
-  ------------- ----------------------------
-  `FromEmail`   `ddinaadelsobhi@gmail.com`
-  `FromName`    `NotificationGateway`
-
-**Authentication settings**
-
-  Setting      Default value
-  ------------ ----------------------------
-  `Username`   `ddinaadelsobhi@gmail.com`
-  `Password`   `welg yxwo xzrz csdd`
-
-## Configuration reference
-
-The following JSON represents the default provider configuration:
-
-``` json
+```json
 {
   "Sms": {
-    "ApiKey": "ded500b6",
-    "ApiSecret": "YDuxkURrQ57fZSop",
+    "ApiKey": "<VONAGE_API_KEY>",
+    "ApiSecret": "<VONAGE_API_SECRET>",
     "SenderId": "NotifGate"
   },
   "WhatsApp": {
-    "IdInstance": "710722813665",
-    "ApiToken": "a593a27806d548489d40d9b027934d6795452172a7d34b4e8c"
+    "IdInstance": "<GREEN_ID_INSTANCE>",
+    "ApiToken": "<GREEN_API_TOKEN>"
   },
   "Smtp": {
     "Host": "smtp.gmail.com",
     "Port": 587,
     "UseSsl": false,
-    "FromEmail": "ddinaadelsobhi@gmail.com",
+    "FromEmail": "sender@example.com",
     "FromName": "NotificationGateway",
-    "Username": "ddinaadelsobhi@gmail.com",
-    "Password": "welg yxwo xzrz csdd"
+    "Username": "sender@example.com",
+    "Password": "<16_CHAR_APP_PASSWORD>"
   }
 }
 ```
-
-## Security notes
-
--   Keep provider API keys, tokens, and passwords out of source control.
--   Store production credentials in environment variables or a secure
-    secrets manager.
--   Restrict access to configuration files containing credentials.
--   Since these credentials have been shared in a chat, consider
-    rotating the API secrets, WhatsApp token, and SMTP app password
-    before using them in production.

@@ -13,6 +13,7 @@ namespace NotificationGateway.API.Controllers;
 
 [ApiController]
 [Route("api/v1/templates")]
+[Authorize]
 public class TemplatesController(
     IMediator mediator,
     NotificationContext context,

@@ -11,6 +11,7 @@ public class Notification
     public Guid NotificationTypeDefinitionId { get; private set; }
     public string NotificationTypeCode { get; private set; } = string.Empty;
     public int SchemaVersion { get; private set; }
+    public string Language { get; private set; } = "en";
     public string PayloadJson { get; private set; } = "{}";
     public NotificationPriority Priority { get; private set; }
     public NotificationStatus Status { get; private set; }
@@ -30,7 +31,8 @@ public class Notification
         Guid tenantId, Guid applicationId, Guid notificationTypeId, string typeCode,
         int schemaVersion, string payloadJson, NotificationPriority priority,
         string? idempotencyKey = null, string? correlationId = null,
-        string? metadataJson = null, DateTime? scheduledAt = null, Guid? userId = null)
+        string? metadataJson = null, DateTime? scheduledAt = null, Guid? userId = null,
+        string language = "en")
     {
         return new Notification
         {
@@ -41,6 +43,7 @@ public class Notification
             NotificationTypeDefinitionId = notificationTypeId,
             NotificationTypeCode = typeCode,
             SchemaVersion = schemaVersion,
+            Language = string.IsNullOrWhiteSpace(language) ? "en" : language.Trim(),
             PayloadJson = payloadJson,
             Priority = priority,
             Status = NotificationStatus.Accepted,

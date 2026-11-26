@@ -54,6 +54,8 @@ public class ProviderResolver(
             NotificationChannel.WhatsApp => "WHATSAPP",
             NotificationChannel.Email => "SMTP",
             NotificationChannel.InApp => "INAPP",
+            NotificationChannel.Push => "PUSH",
+            NotificationChannel.Voice => "VOICE",
             _ => "MOCK"
         };
 

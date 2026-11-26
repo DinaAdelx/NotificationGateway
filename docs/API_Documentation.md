@@ -74,7 +74,16 @@
 
 ---
 
-## 7. Webhooks & SignalR
+## 7. User Preferences (`/api/v1/preferences`)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/preferences/{externalUserId}` | Authenticated | Retrieve a recipient's `PreferredLanguage`, `PreferredChannels`, `DisabledNotificationTypes`, and `QuietHours`. |
+| `PUT` | `/api/v1/preferences` | Authenticated | Create or update opt-out / preferred channels / quiet hours enforced by `OutboxProcessor`. |
+
+---
+
+## 8. Webhooks & SignalR
 
 | Protocol / Endpoint | Purpose |
 |---|---|

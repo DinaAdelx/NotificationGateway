@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NotificationGateway.API.Authentication;
 using NotificationGateway.Application.Notifications.CancelNotification;
@@ -12,6 +13,7 @@ namespace NotificationGateway.API.Controllers;
 
 [ApiController]
 [Route("api/v1/notifications")]
+[Authorize]
 public class NotificationsController(
     IMediator mediator,
     NotificationContext context,
